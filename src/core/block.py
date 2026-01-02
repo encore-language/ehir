@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from src.core.instructions.base import Instruction
+from src.core.instructions.control_flow.base import ControlFlow
 
 
 @dataclass
@@ -15,4 +16,4 @@ class Block:
 
 @dataclass
 class TerminatedBlock(Block):
-    term: Instruction
+    term: ControlFlow

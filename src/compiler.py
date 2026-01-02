@@ -18,5 +18,3 @@ class Compiler:
 
         codegen = Codegen()
         codegen.run(ast)
-
-        print(*ast, sep="\n")

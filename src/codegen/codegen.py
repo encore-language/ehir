@@ -1,16 +1,127 @@
+import llvmlite.binding as llvm
 import llvmlite.ir as ir
 
+from src.core.block import TerminatedBlock
+from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
+from src.core.instructions.base import Instruction
+from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory.load import Instruction_load
+from src.core.instructions.memory.salloc import Instruction_salloc
+from src.core.primitives import Usize, Usize_t
+from src.core.primitives.base import Primitive
+from src.core.type import Type
 
 
 class Codegen:
+    builder: ir.IRBuilder
+
     def __init__(self):
+        llvm.initialize_native_target()
+        llvm.initialize_native_asmprinter()
+        llvm.initialize_native_asmparser()
+
         self.module = ir.Module()
         self.builder = ir.IRBuilder()
+        self._variables: dict[str, object] = {}
 
     def run(self, ast: list[Derective]):
         for derective in ast:
             self._codegen_derective(derective)
 
+        print("============ LLVM IR DEBUG ===============")
+        llvm_ir = str(self.module)
+        print(llvm_ir)
+        print("============ LLVM IR VERIFY ==============")
+        a = llvm.parse_assembly(llvm_ir)
+        a.verify()
+        print(a)
+
     def _codegen_derective(self, derective: Derective):
-        pass
+        if isinstance(derective, Derective_fn):
+            self._codegen_fn(derective)
+        else:
+            raise NotImplementedError(f"Unsupported derective type: {type(derective)}")
+
+    def _codegen_fn(self, fn: Derective_fn):
+        func_type = ir.FunctionType(self._build_type(fn.ret_type), [self._build_type(t.type) for t in fn.params])
+        func = ir.Function(self.module, func_type, name=fn.name)
+        self._variables.clear()
+        for block in fn.body:
+            assert isinstance(block, TerminatedBlock)
+            ir_block = func.append_basic_block(block.name)
+            self.builder.position_at_end(ir_block)
+            self._build_block(block)
+
+    def _build_block(self, block: TerminatedBlock):
+        for instr in block.body:
+            self._build_instruction(instr)
+        self._build_instruction(block.term)
+
+    def _build_instruction(self, instr: Instruction):
+        if isinstance(instr, Instruction_salloc):
+            self._build_salloc(instr)
+        elif isinstance(instr, Instruction_put):
+            self._build_put(instr)
+        elif isinstance(instr, Instruction_load):
+            self._build_load(instr)
+        elif isinstance(instr, Instruction_ret):
+            self._build_ret(instr)
+        else:
+            raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
+
+    def _build_salloc(self, instr: Instruction_salloc):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+
+        byte_size = self._sizeof(instr.type)
+        ptr = self.builder.alloca(ir.IntType(8), size=byte_size)
+        target_type = self._build_type(instr.type)
+        casted_ptr = self.builder.bitcast(ptr, ir.PointerType(target_type), name=instr.var_out.name)
+        self._variables[instr.var_out.name] = casted_ptr
+        return casted_ptr
+
+    def _build_put(self, instr: Instruction_put):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        constant = self._build_primitive(instr.primitive)
+        self.builder.store(constant, self._variables[instr.var.name])
+
+    def _build_load(self, instr: Instruction_load):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        ptr = self._variables[instr.var.name]
+        value = self.builder.load(ptr)
+        self._variables[instr.var_out.name] = value
+        return value
+
+    def _build_ret(self, instr: Instruction_ret):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        value = self._variables[instr.var.name]
+        self.builder.ret(value)
+
+    def _build_type(self, type: Type) -> ir.Type:
+        if isinstance(type, Usize_t):
+            return ir.IntType(bits=type.size)
+        raise NotImplementedError(f"Unsupported type: {type}")
+
+    def _build_primitive(self, prim: Primitive) -> ir.Constant:
+        if isinstance(prim, Usize):
+            return ir.Constant(ir.IntType(bits=prim.type.size), prim.val)
+        raise NotImplementedError(f"Unsupported primitive: {prim}")
+
+    def _sizeof(self, type: Type):
+        t = self._build_type(type)
+
+        # Null pointer типа ptr<T>
+        null_ptr_type = ir.PointerType(t)
+        null_ptr = ir.Constant(null_ptr_type, None)
+
+        # GEP: &null_ptr[1] = sizeof(T)
+        one = ir.Constant(ir.IntType(32), 1)
+        size_ptr = self.builder.gep(null_ptr, [one])
+
+        # Convert to integer
+        return self.builder.ptrtoint(size_ptr, ir.IntType(64))

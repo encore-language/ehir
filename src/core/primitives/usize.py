@@ -2,6 +2,8 @@ from .base import Primitive, PrimitiveType
 
 
 class Usize_t(PrimitiveType):
+    size: int
+
     def __init__(self, size: int = 32):
         assert size > 0
         super().__init__(
