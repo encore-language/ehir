@@ -1,5 +1,5 @@
-fdecl main() -> u8 {
+fn main() -> u8 {
 $entry:
-    zero = cps 0_u8
+    zero = cpos 0_u8
     ret zero
 }
