@@ -9,6 +9,7 @@ from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.memory import Instruction_put
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
+from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive
 from src.core.type import Type
@@ -47,7 +48,13 @@ class Codegen:
     def _codegen_fn(self, fn: Derective_fn):
         func_type = ir.FunctionType(self._build_type(fn.ret_type), [self._build_type(t.type) for t in fn.params])
         func = ir.Function(self.module, func_type, name=fn.name)
+
         self._variables.clear()
+        for i, param in enumerate(func.args):
+            param_name = fn.params[i].name
+            self._variables[param_name] = param
+            param.name = param_name
+
         for block in fn.body:
             assert isinstance(block, TerminatedBlock)
             ir_block = func.append_basic_block(block.name)
@@ -68,6 +75,8 @@ class Codegen:
             self._build_load(instr)
         elif isinstance(instr, Instruction_ret):
             self._build_ret(instr)
+        elif isinstance(instr, Instruction_add):
+            self._build_add(instr)
         else:
             raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
 
@@ -95,6 +104,15 @@ class Codegen:
         value = self.builder.load(ptr)
         self._variables[instr.var_out.name] = value
         return value
+
+    def _build_add(self, instr: Instruction_add):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.add(left, right)
+        self._variables[instr.var_out.name] = result
+        return result
 
     def _build_ret(self, instr: Instruction_ret):
         self.builder.comment("")

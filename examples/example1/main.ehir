@@ -1,5 +1,12 @@
 fn main() -> u8 {
-$entry:
+  $entry:
     zero = cpos 0_u8
     ret zero
+}
+
+fn increment(value: u8) -> u8 {
+  $entry:
+    one = cpos 1_u8
+    res = add value, one
+    ret res
 }

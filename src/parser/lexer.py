@@ -95,6 +95,10 @@ class Lexer:
                 self._append_token(t.CPOS)
             case "ret":
                 self._append_token(t.RET)
+            case "add":
+                self._append_token(t.ADD)
+            case "sub":
+                self._append_token(t.SUB)
             case _:
                 self._append_token(t.IDENTIFIER)
 

@@ -4,10 +4,11 @@ from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
 from src.core.instructions.capture import Instruction_cpos
 from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.operators.arithmetic import Instruction_add, Instruction_sub
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive, PrimitiveType
 from src.core.type import Type
-from src.core.variable import Variable
+from src.core.variable import Parameter, Variable
 from src.parser import tokens as t
 from src.parser.lexer import Lexer
 
@@ -37,10 +38,20 @@ class Parser:
     def _parse_fn(self) -> Derective_fn:
         self._safe_consume(t.FN)
         name = self._safe_consume(t.IDENTIFIER).string
+
+        params = []
         self._safe_consume(t.LEFT_PAREN)
+        if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
+            params.append(self._parse_param())
+
+            while not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
+                self._safe_consume(t.COMMA)
+                params.append(self._parse_param())
         self._safe_consume(t.RIGHT_PAREN)
+
         self._safe_consume(t.ARROW)
         ret_type = self._parse_type()
+
         self._safe_consume(t.LEFT_BRACE)
 
         body = []
@@ -48,7 +59,7 @@ class Parser:
             body.append(self._parse_block())
         self._safe_consume(t.RIGHT_BRACE)
 
-        return Derective_fn(name=name, params=[], ret_type=ret_type, body=body)
+        return Derective_fn(name=name, params=params, ret_type=ret_type, body=body)
 
     def _parse_block(self) -> Block:
         self._safe_consume(t.DOLLAR)
@@ -84,6 +95,16 @@ class Parser:
         if isinstance(curr_token, t.CPOS):
             primitive = self._parse_primitive()
             return Instruction_cpos(var_out=var, primitive=primitive)
+        elif isinstance(curr_token, t.ADD):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_add(var_out=var, lhs=lhs, rhs=rhs)
+        elif isinstance(curr_token, t.SUB):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_sub(var_out=var, lhs=lhs, rhs=rhs)
         else:
             raise ValueError(f"Unexpected token {curr_token}")
 
@@ -94,6 +115,13 @@ class Parser:
             self._safe_consume(t.COLON)
             type = self._parse_type()
         return Variable(name.string, type)
+
+    def _parse_param(self) -> Parameter:
+        var = self._parse_variable()
+        if var.type is not None:
+            return Parameter(var.name, var.type)
+        else:
+            raise ValueError(f"Parameter {var.name} must have a type")
 
     def _parse_type(self) -> Type | PrimitiveType:
         name = self._safe_consume(t.IDENTIFIER).string

@@ -2,6 +2,7 @@ from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.capture.cpos import Instruction_cpos
 from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.variable import Variable
 
 
@@ -50,6 +51,11 @@ class Resolver:
                         raise TypeError(f"Type mismatch for return value: {instr.var.type} != {expected_type}")
                     instr.var.type = expected_type
                     instr.var = add_variable(instr.var)
+                elif isinstance(instr, Instruction_add):
+                    instr.var_out = add_variable(instr.var_out)
+                    instr.lhs = add_variable(instr.lhs)
+                    instr.rhs = add_variable(instr.rhs)
+
                 else:
                     raise ValueError(f"Unexpected instruction: {instr}")
 

@@ -6,8 +6,14 @@ from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.memory import Instruction_put
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
+from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.type import Pointer
 from src.core.variable import TypedVariable
+
+SKIPABLE = (
+    Instruction_ret,
+    Instruction_add,
+)
 
 
 class Downgrader:
@@ -26,7 +32,7 @@ class Downgrader:
     def _downgrade(self, instr: Instruction) -> list[Instruction]:
         if isinstance(instr, Instruction_cpos):
             return self._downgrade_cpos(instr)
-        elif isinstance(instr, Instruction_ret):
+        elif isinstance(instr, SKIPABLE):
             return [instr]
         else:
             raise NotImplementedError(f"Downgrading instruction for {type(instr)}:{instr} not implemented")
