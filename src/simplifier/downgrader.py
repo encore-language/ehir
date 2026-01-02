@@ -7,12 +7,14 @@ from src.core.instructions.memory import Instruction_put
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
+from src.core.instructions.special.call import Instruction_call
 from src.core.type import Pointer
 from src.core.variable import TypedVariable
 
 SKIPABLE = (
     Instruction_ret,
     Instruction_add,
+    Instruction_call,
 )
 
 

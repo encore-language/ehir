@@ -93,6 +93,8 @@ class Lexer:
                 self._append_token(t.FN)
             case "cpos":
                 self._append_token(t.CPOS)
+            case "call":
+                self._append_token(t.CALL)
             case "ret":
                 self._append_token(t.RET)
             case "add":

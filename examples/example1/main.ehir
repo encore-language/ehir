@@ -1,7 +1,8 @@
 fn main() -> u8 {
   $entry:
-    zero = cpos 0_u8
-    ret zero
+    var = cpos 0_u8
+    res = call increment(var)
+    ret res
 }
 
 fn increment(value: u8) -> u8 {

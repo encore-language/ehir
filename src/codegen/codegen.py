@@ -10,6 +10,7 @@ from src.core.instructions.memory import Instruction_put
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
+from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive
 from src.core.type import Type
@@ -17,6 +18,7 @@ from src.core.type import Type
 
 class Codegen:
     builder: ir.IRBuilder
+    module: ir.Module
 
     def __init__(self):
         llvm.initialize_native_target()
@@ -28,6 +30,12 @@ class Codegen:
         self._variables: dict[str, object] = {}
 
     def run(self, ast: list[Derective]):
+        # step 0: build all function declarations
+        for derective in ast:
+            if isinstance(derective, Derective_fn):
+                self._codegen_fn_decl(derective)
+
+        # step 1: build all function bodies
         for derective in ast:
             self._codegen_derective(derective)
 
@@ -39,15 +47,18 @@ class Codegen:
         a.verify()
         print(a)
 
+    def _codegen_fn_decl(self, fn: Derective_fn):
+        func_type = ir.FunctionType(self._build_type(fn.ret_type), [self._build_type(t.type) for t in fn.params])
+        ir.Function(self.module, func_type, name=fn.name)
+
     def _codegen_derective(self, derective: Derective):
         if isinstance(derective, Derective_fn):
-            self._codegen_fn(derective)
+            self._codegen_fn_body(derective)
         else:
             raise NotImplementedError(f"Unsupported derective type: {type(derective)}")
 
-    def _codegen_fn(self, fn: Derective_fn):
-        func_type = ir.FunctionType(self._build_type(fn.ret_type), [self._build_type(t.type) for t in fn.params])
-        func = ir.Function(self.module, func_type, name=fn.name)
+    def _codegen_fn_body(self, fn: Derective_fn):
+        func = [f for f in self.module.functions if f.name == fn.name][0]
 
         self._variables.clear()
         for i, param in enumerate(func.args):
@@ -77,6 +88,8 @@ class Codegen:
             self._build_ret(instr)
         elif isinstance(instr, Instruction_add):
             self._build_add(instr)
+        elif isinstance(instr, Instruction_call):
+            self._build_call(instr)
         else:
             raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
 
@@ -111,6 +124,16 @@ class Codegen:
         left = self._variables[instr.lhs.name]
         right = self._variables[instr.rhs.name]
         result = self.builder.add(left, right)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_call(self, instr: Instruction_call):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        func = [f for f in self.module.functions if f.name == instr.fn_name][0]
+
+        args = [self._variables[arg.name] for arg in instr.args]
+        result = self.builder.call(func, args)
         self._variables[instr.var_out.name] = result
         return result
 

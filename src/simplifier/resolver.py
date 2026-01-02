@@ -3,14 +3,22 @@ from src.core.derectives.base import Derective
 from src.core.instructions.capture.cpos import Instruction_cpos
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.operators.arithmetic import Instruction_add
+from src.core.instructions.special.call import Instruction_call
 from src.core.variable import Variable
 
 
 class Resolver:
+    fn: dict[str, Derective_fn]
+
     def run(self, ast: list[Derective]):
+        self.fn = {}
+
         for derective in ast:
             if isinstance(derective, Derective_fn):
-                self._resolve(derective)
+                self.fn[derective.name] = derective
+
+        for fn in self.fn.values():
+            self._resolve(fn)
 
     def _resolve(self, fn: Derective_fn):
         variables: dict[str, Variable] = {}
@@ -55,6 +63,17 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
                     instr.lhs = add_variable(instr.lhs)
                     instr.rhs = add_variable(instr.rhs)
+                elif isinstance(instr, Instruction_call):
+                    target_fn = self.fn[instr.fn_name]
+                    expected_type = target_fn.ret_type
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+
+                    instr.args = [add_variable(arg) for arg in instr.args]
 
                 else:
                     raise ValueError(f"Unexpected instruction: {instr}")
