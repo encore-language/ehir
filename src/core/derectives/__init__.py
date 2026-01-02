@@ -1,7 +1,5 @@
-from .fdecl import Derective_fdecl
-from .fdefi import Derective_fdefi
+from .fn import Derective_fn
 
 __all__ = [
-    "Derective_fdecl",
-    "Derective_fdefi",
+    "Derective_fn",
 ]

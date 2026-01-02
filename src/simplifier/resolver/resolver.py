@@ -1,4 +1,4 @@
-from src.core.derectives import Derective_fdecl, Derective_fdefi
+from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.capture.cpos import Instruction_cpos
 from src.core.instructions.control_flow.ret import Instruction_ret
@@ -7,23 +7,11 @@ from src.core.variable import Variable
 
 class Resolver:
     def resolve_ast(self, ast: list[Derective]):
-        fdefis: dict[str, Derective_fdefi] = {}
-        fdecls: dict[str, Derective_fdecl] = {}
-
         for derective in ast:
-            if isinstance(derective, Derective_fdefi):
-                assert derective.name not in fdefis, f"Duplicate function definition: {derective.name}"
-                fdefis[derective.name] = derective
-            elif isinstance(derective, Derective_fdecl):
-                assert derective.name not in fdecls, f"Duplicate function declaration: {derective.name}"
-                fdecls[derective.name] = derective
+            if isinstance(derective, Derective_fn):
+                self._resolve(derective)
 
-        assert set(fdefis.keys()) == set(fdecls.keys())
-
-        for name in fdecls.keys():
-            self._resolve(fdecls[name], fdefis[name])
-
-    def _resolve(self, fdecl: Derective_fdecl, fdefi: Derective_fdefi):
+    def _resolve(self, fn: Derective_fn):
         variables: dict[str, Variable] = {}
 
         def add_variable(var: Variable) -> Variable:
@@ -43,10 +31,10 @@ class Resolver:
                 return old_var
 
         # step 0: Collect all variables
-        for param in fdecl.params:
+        for param in fn.params:
             add_variable(param)
 
-        for block in fdefi.body:
+        for block in fn.body:
             for instr in block.body:
                 if isinstance(instr, Instruction_cpos):
                     expected_type = instr.primitive.type
@@ -57,7 +45,7 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
                 elif isinstance(instr, Instruction_ret):
-                    expected_type = fdecl.ret_type
+                    expected_type = fn.ret_type
                     if instr.var.type and instr.var.type != expected_type:
                         raise TypeError(f"Type mismatch for return value: {instr.var.type} != {expected_type}")
                     instr.var.type = expected_type

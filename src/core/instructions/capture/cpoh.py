@@ -5,8 +5,8 @@ from src.core.primitives.base import Primitive
 
 
 @dataclass
-class Instruction_cpos(Assignable):
+class Instruction_cpoh(Assignable):
     primitive: Primitive
 
     def __str__(self) -> str:
-        return f"{super().__str__()}cpos {self.primitive}"
+        return f"{super().__str__()}cpoh {self.primitive}"

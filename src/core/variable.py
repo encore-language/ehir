@@ -18,4 +18,4 @@ class TypedVariable(Variable):
     type: Type
 
 
-Parameter = Variable
+Parameter = TypedVariable
