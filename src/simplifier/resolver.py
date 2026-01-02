@@ -6,7 +6,7 @@ from src.core.variable import Variable
 
 
 class Resolver:
-    def resolve_ast(self, ast: list[Derective]):
+    def run(self, ast: list[Derective]):
         for derective in ast:
             if isinstance(derective, Derective_fn):
                 self._resolve(derective)

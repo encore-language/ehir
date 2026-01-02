@@ -5,7 +5,9 @@ description = "Encore High Intermediate Representation"
 readme = "README.md"
 authors = ["Maksim Shushkevich <m.e.shushkevich@yandex.com>"]
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "llvmlite>=0.46.0",
+]
 
 [dependency-groups]
 dev = [
