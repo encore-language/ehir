@@ -1,3 +1,4 @@
+from src.codegen.codegen import Codegen
 from src.core.derectives.base import Derective
 from src.simplifier.downgrader import Downgrader
 from src.simplifier.normalizer import Normalizer
@@ -14,5 +15,8 @@ class Compiler:
 
         normalizer = Normalizer()
         normalizer.run(ast)
+
+        codegen = Codegen()
+        codegen.run(ast)
 
         print(*ast, sep="\n")

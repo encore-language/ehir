@@ -4,7 +4,7 @@ from src.core.instructions.base import Instruction
 from src.core.instructions.capture import Instruction_cpos
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.memory import Instruction_put
-from src.core.instructions.memory.pload import Instruction_pload
+from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.type import Pointer
 from src.core.variable import TypedVariable
@@ -42,7 +42,7 @@ class Downgrader:
             primitive=instr.primitive,
             var=salloc_var_out,
         )
-        load = Instruction_pload(
+        load = Instruction_load(
             var_out=instr.var_out,
             var=salloc_var_out,
         )
