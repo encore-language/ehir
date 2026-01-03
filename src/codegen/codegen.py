@@ -207,22 +207,16 @@ class Codegen:
         base = self._variables[instr.src.name]
         assert hasattr(base, "type")
         if not isinstance(base.type, ir.PointerType):
-            # Создаём временный указатель на стеке
             temp = self.builder.alloca(base.type)
             self.builder.store(base, temp)
             base = temp
 
-        # 3. Готовим индексы
-        indices = [ir.Constant(ir.IntType(32), 0)]  # разыменование
+        indices = [ir.Constant(ir.IntType(32), 0)]
         for idx_var in instr.indexes:
             indices.append(ir.Constant(ir.IntType(32), int(idx_var.name)))
 
-        # 4. Вычисляем указатель на поле
         result = self.builder.gep(base, indices, name=instr.var_out.name)
-
-        # 5. Сохраняем результат
         self._variables[instr.var_out.name] = result
-
         return result
 
     def _build_salloc(self, instr: Instruction_salloc):
@@ -242,7 +236,7 @@ class Codegen:
 
         byte_size = self._sizeof(instr.type)
         malloc_func = self._get_malloc_function()
-        raw_ptr = self.builder.call(malloc_func, [byte_size])
+        raw_ptr = self.builder.call(malloc_func, [byte_size], name=f".halloc_{instr.var_out.name}")
         target_type = self._build_type(instr.type)
         casted_ptr = self.builder.bitcast(raw_ptr, ir.PointerType(target_type), name=instr.var_out.name)
         self._variables[instr.var_out.name] = casted_ptr
@@ -301,12 +295,8 @@ class Codegen:
         default_block = blocks_mapping[instr.default_case]
         switch = self.builder.switch(cond_value, default_block)
         for case_value, block_name in instr.cases:
-            # Преобразуем значение в константу
             const_val = self._build_primitive(case_value)
-            # Находим целевой блок
             target_block = blocks_mapping[block_name]
-
-            # Добавляем в switch
             switch.add_case(const_val, target_block)
 
     def _build_ret(self, instr: Instruction_ret):
@@ -342,69 +332,45 @@ class Codegen:
         return self.builder.ptrtoint(size_ptr, ir.IntType(64), name=f".sizeof_{type.name}_")
 
     def _get_malloc_function(self) -> ir.Function:
-        """Получает или объявляет функцию malloc."""
-
-        # Проверяем, объявлена ли уже malloc
         if "malloc" in self.module.globals:
             return self.module.globals["malloc"]
-
-        # Объявляем malloc: void* malloc(size_t size)
         malloc_type = ir.FunctionType(
-            ir.IntType(8).as_pointer(),  # void* в LLVM это i8*
-            [ir.IntType(64)],  # size_t обычно i64
+            ir.IntType(8).as_pointer(),
+            [ir.IntType(64)],
         )
 
         malloc_func = ir.Function(self.module, malloc_type, name="malloc")
-
-        # Добавляем атрибуты для лучшей совместимости
         malloc_func.attributes.add("noinline")
-
         return malloc_func
 
     def _get_free_function(self):
-        """Получает или объявляет функцию free."""
-
         if "free" in self.module.globals:
             return self.module.globals["free"]
 
-        # free: void free(void* ptr)
         free_type = ir.FunctionType(ir.VoidType(), [ir.IntType(8).as_pointer()])
-
         free_func = ir.Function(self.module, free_type, name="free")
-
         free_func.attributes.add("noinline")
         return free_func
 
     def _initialize_memory(self, ptr, elem_type, size):
-        """Инициализирует выделенную память нулями."""
-
-        # Получаем функцию memset
         memset_func = self._get_memset_function()
-
-        # Преобразуем ptr обратно в i8* для memset
         byte_ptr = self.builder.bitcast(ptr, ir.IntType(8).as_pointer())
-
-        # Вызываем memset(ptr, 0, size)
         zero = ir.Constant(ir.IntType(8), 0)
         self.builder.call(memset_func, [byte_ptr, zero, size])
 
     def _get_memset_function(self):
-        """Получает или объявляет функцию memset."""
-
         if "memset" in self.module.globals:
             return self.module.globals["memset"]
 
-        # void* memset(void* dest, int ch, size_t count)
         memset_type = ir.FunctionType(
             ir.IntType(8).as_pointer(),
             [
-                ir.IntType(8).as_pointer(),  # dest
-                ir.IntType(32),  # ch (int)
-                ir.IntType(64),  # count (size_t)
+                ir.IntType(8).as_pointer(),
+                ir.IntType(32),
+                ir.IntType(64),
             ],
         )
 
         memset_func = ir.Function(self.module, memset_type, name="memset")
-
         memset_func.attributes.add("noinline")
         return memset_func
