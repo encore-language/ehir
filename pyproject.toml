@@ -1,6 +1,6 @@
 [project]
 name = "ehir"
-version = "0.0.0"
+version = "0.0.1"
 description = "Encore High Intermediate Representation"
 readme = "README.md"
 authors = ["Maksim Shushkevich <m.e.shushkevich@yandex.com>"]
