@@ -1,11 +1,12 @@
 from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
+from src.core.instructions.capture import Instruction_cpoh
 from src.core.instructions.capture.cpos import Instruction_cpos
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory import Instruction_hfree, Instruction_put
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
@@ -52,14 +53,15 @@ class Resolver:
 
         for block in fn.body:
             for instr in block.body:
-                if isinstance(instr, Instruction_cpos):
-                    expected_type = instr.primitive.type
+                if isinstance(instr, (Instruction_cpos, Instruction_cpoh)):
+                    expected_type = Pointer(instr.primitive.type)
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(
                             f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
                         )
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
+
                 elif isinstance(instr, Instruction_ret):
                     expected_type = fn.ret_type
                     if instr.var.type and instr.var.type != expected_type:
@@ -106,6 +108,8 @@ class Resolver:
                 elif isinstance(instr, Instruction_load):
                     instr.var = add_variable(instr.var)
                     instr.var_out = add_variable(instr.var_out)
+                elif isinstance(instr, Instruction_hfree):
+                    instr.var = add_variable(instr.var)
                 else:
                     raise ValueError(f"Unexpected instruction: {instr}")
 

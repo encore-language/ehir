@@ -120,6 +120,12 @@ class Lexer:
                 self._append_token(t.PUT)
             case "load":
                 self._append_token(t.LOAD)
+            case "halloc":
+                self._append_token(t.HALLOC)
+            case "cpoh":
+                self._append_token(t.CPOH)
+            case "hfree":
+                self._append_token(t.HFREE)
             case _:
                 self._append_token(t.IDENTIFIER)
 

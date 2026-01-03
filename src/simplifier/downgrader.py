@@ -1,12 +1,13 @@
 from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
-from src.core.instructions.capture import Instruction_cpos
+from src.core.instructions.capture import Instruction_cpoh, Instruction_cpos
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory import Instruction_hfree, Instruction_put
+from src.core.instructions.memory.halloc import Instruction_halloc
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
@@ -23,6 +24,7 @@ SKIPABLE = (
     Instruction_salloc,
     Instruction_load,
     Instruction_put,
+    Instruction_hfree,
 )
 
 
@@ -42,6 +44,8 @@ class Downgrader:
     def _downgrade(self, instr: Instruction) -> list[Instruction]:
         if isinstance(instr, Instruction_cpos):
             return self._downgrade_cpos(instr)
+        elif isinstance(instr, Instruction_cpoh):
+            return self._downgrade_cpoh(instr)
         elif isinstance(instr, Instruction_cbr):
             return self._downgrade_cbr(instr)
         elif isinstance(instr, Instruction_br):
@@ -53,20 +57,31 @@ class Downgrader:
 
     def _downgrade_cpos(self, instr: Instruction_cpos) -> list[Instruction]:
         assert instr.var_out.type is not None
-        salloc_var_out = TypedVariable(name=f"{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
+        assert isinstance(instr.var_out.type, Pointer)
+
         salloc = Instruction_salloc(
-            var_out=salloc_var_out,
-            type=instr.var_out.type,
+            var_out=instr.var_out,
+            type=instr.var_out.type.pointee,
         )
         put = Instruction_put(
             primitive=instr.primitive,
-            var=salloc_var_out,
+            var=instr.var_out,
         )
-        load = Instruction_load(
+        return [salloc, put]
+
+    def _downgrade_cpoh(self, instr: Instruction_cpoh) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+
+        halloc = Instruction_halloc(
             var_out=instr.var_out,
-            var=salloc_var_out,
+            type=instr.var_out.type.pointee,
         )
-        return [salloc, put, load]
+        put = Instruction_put(
+            primitive=instr.primitive,
+            var=instr.var_out,
+        )
+        return [halloc, put]
 
     def _downgrade_cbr(self, instr: Instruction_cbr) -> list[Instruction]:
         assert instr.cond_var.type is not None

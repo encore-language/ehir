@@ -2,12 +2,13 @@ from src.core.block import Block
 from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
-from src.core.instructions.capture import Instruction_cpos
+from src.core.instructions.capture import Instruction_cpoh, Instruction_cpos
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory import Instruction_hfree, Instruction_put
+from src.core.instructions.memory.halloc import Instruction_halloc
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add, Instruction_sub
@@ -92,11 +93,18 @@ class Parser:
             return self._parse_switch()
         elif isinstance(curr_token, t.PUT):
             return self._parse_put()
+        elif isinstance(curr_token, t.HFREE):
+            return self._parse_hfree()
 
         next_token = self._lookup_next()
         # Assign with typed / untyped variable
         if isinstance(next_token, (t.COLON, t.EQUAL)):
             return self._parse_assignable()
+
+    def _parse_hfree(self) -> Instruction_hfree:
+        self._safe_consume(t.HFREE)
+        var = self._parse_variable()
+        return Instruction_hfree(var=var)
 
     def _parse_put(self) -> Instruction_put:
         self._safe_consume(t.PUT)
@@ -155,6 +163,10 @@ class Parser:
             primitive = self._parse_primitive()
             return Instruction_cpos(var_out=var, primitive=primitive)
 
+        elif isinstance(curr_token, t.CPOH):
+            primitive = self._parse_primitive()
+            return Instruction_cpoh(var_out=var, primitive=primitive)
+
         elif isinstance(curr_token, t.CALL):
             fn_name = self._safe_consume(t.IDENTIFIER).string
             args = []
@@ -183,6 +195,10 @@ class Parser:
         elif isinstance(curr_token, t.SALLOC):
             type = self._parse_type()
             return Instruction_salloc(var_out=var, type=type)
+
+        elif isinstance(curr_token, t.HALLOC):
+            type = self._parse_type()
+            return Instruction_halloc(var_out=var, type=type)
 
         elif isinstance(curr_token, t.LOAD):
             var_src = self._parse_variable()

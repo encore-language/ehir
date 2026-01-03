@@ -7,7 +7,8 @@ from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory import Instruction_hfree, Instruction_put
+from src.core.instructions.memory.halloc import Instruction_halloc
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
@@ -85,6 +86,8 @@ class Codegen:
     def _build_instruction(self, instr: Instruction):
         if isinstance(instr, Instruction_salloc):
             self._build_salloc(instr)
+        elif isinstance(instr, Instruction_halloc):
+            self._build_halloc(instr)
         elif isinstance(instr, Instruction_put):
             self._build_put(instr)
         elif isinstance(instr, Instruction_load):
@@ -97,6 +100,8 @@ class Codegen:
             self._build_call(instr)
         elif isinstance(instr, Instruction_switch):
             self._build_switch(instr)
+        elif isinstance(instr, Instruction_hfree):
+            self._build_hfree(instr)
         else:
             raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
 
@@ -110,6 +115,26 @@ class Codegen:
         casted_ptr = self.builder.bitcast(ptr, ir.PointerType(target_type), name=instr.var_out.name)
         self._variables[instr.var_out.name] = casted_ptr
         return casted_ptr
+
+    def _build_halloc(self, instr: Instruction_halloc):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+
+        byte_size = self._sizeof(instr.type)
+        malloc_func = self._get_malloc_function()
+        raw_ptr = self.builder.call(malloc_func, [byte_size])
+        target_type = self._build_type(instr.type)
+        casted_ptr = self.builder.bitcast(raw_ptr, ir.PointerType(target_type), name=instr.var_out.name)
+        self._variables[instr.var_out.name] = casted_ptr
+        return casted_ptr
+
+    def _build_hfree(self, instr: Instruction_hfree):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+
+        ptr = self._variables[instr.var.name]
+        free_func = self._get_free_function()
+        self.builder.call(free_func, [ptr])
 
     def _build_put(self, instr: Instruction_put):
         self.builder.comment("")
@@ -193,3 +218,71 @@ class Codegen:
 
         # Convert to integer
         return self.builder.ptrtoint(size_ptr, ir.IntType(64))
+
+    def _get_malloc_function(self) -> ir.Function:
+        """Получает или объявляет функцию malloc."""
+
+        # Проверяем, объявлена ли уже malloc
+        if "malloc" in self.module.globals:
+            return self.module.globals["malloc"]
+
+        # Объявляем malloc: void* malloc(size_t size)
+        malloc_type = ir.FunctionType(
+            ir.IntType(8).as_pointer(),  # void* в LLVM это i8*
+            [ir.IntType(64)],  # size_t обычно i64
+        )
+
+        malloc_func = ir.Function(self.module, malloc_type, name="malloc")
+
+        # Добавляем атрибуты для лучшей совместимости
+        malloc_func.attributes.add("noinline")
+
+        return malloc_func
+
+    def _get_free_function(self):
+        """Получает или объявляет функцию free."""
+
+        if "free" in self.module.globals:
+            return self.module.globals["free"]
+
+        # free: void free(void* ptr)
+        free_type = ir.FunctionType(ir.VoidType(), [ir.IntType(8).as_pointer()])
+
+        free_func = ir.Function(self.module, free_type, name="free")
+
+        free_func.attributes.add("noinline")
+        return free_func
+
+    def _initialize_memory(self, ptr, elem_type, size):
+        """Инициализирует выделенную память нулями."""
+
+        # Получаем функцию memset
+        memset_func = self._get_memset_function()
+
+        # Преобразуем ptr обратно в i8* для memset
+        byte_ptr = self.builder.bitcast(ptr, ir.IntType(8).as_pointer())
+
+        # Вызываем memset(ptr, 0, size)
+        zero = ir.Constant(ir.IntType(8), 0)
+        self.builder.call(memset_func, [byte_ptr, zero, size])
+
+    def _get_memset_function(self):
+        """Получает или объявляет функцию memset."""
+
+        if "memset" in self.module.globals:
+            return self.module.globals["memset"]
+
+        # void* memset(void* dest, int ch, size_t count)
+        memset_type = ir.FunctionType(
+            ir.IntType(8).as_pointer(),
+            [
+                ir.IntType(8).as_pointer(),  # dest
+                ir.IntType(32),  # ch (int)
+                ir.IntType(64),  # count (size_t)
+            ],
+        )
+
+        memset_func = ir.Function(self.module, memset_type, name="memset")
+
+        memset_func.attributes.add("noinline")
+        return memset_func
