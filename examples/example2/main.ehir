@@ -1,0 +1,30 @@
+fn main() -> u8 {
+  $entry:
+    var_ptr: u8* = salloc u8
+    put 0_u8, var_ptr: u8*
+    var: u8 = load var_ptr: u8*
+    switch var: u8, $default {
+      0_u8 => $case_zero
+      1_u8 => $case_one
+    }
+  $case_zero:
+    res: u8 = call increment(var: u8)
+    ret res: u8
+  $case_one:
+    switch var: u8, $default {
+      1_u8 => $case_zero
+    }
+  $default:
+    zero_ptr: u1* = salloc u1
+    put 0_u1, zero_ptr: u1*
+    zero: u1 = load zero_ptr: u1*
+    switch zero: u1, $case_zero {}
+}
+fn increment(value: u8) -> u8 {
+  $entry:
+    one_ptr: u8* = salloc u8
+    put 1_u8, one_ptr: u8*
+    one: u8 = load one_ptr: u8*
+    res: u8 = add value: u8, one: u8
+    ret res: u8
+}

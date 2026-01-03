@@ -5,8 +5,12 @@ from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
+from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory.load import Instruction_load
+from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.instructions.special.call import Instruction_call
+from src.core.type import Pointer
 from src.core.variable import Variable
 
 
@@ -83,6 +87,25 @@ class Resolver:
                     instr.cond_var = add_variable(instr.cond_var)
                 elif isinstance(instr, Instruction_switch):
                     instr.cond_var = add_variable(instr.cond_var)
+                elif isinstance(instr, Instruction_salloc):
+                    expected_type = Pointer(instr.type)
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+                elif isinstance(instr, Instruction_put):
+                    expected_type = Pointer(instr.primitive.type)
+                    if instr.var.type and instr.var.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var.name}': {instr.var.type} != {expected_type}"
+                        )
+                    instr.var.type = expected_type
+                    instr.var = add_variable(instr.var)
+                elif isinstance(instr, Instruction_load):
+                    instr.var = add_variable(instr.var)
+                    instr.var_out = add_variable(instr.var_out)
                 else:
                     raise ValueError(f"Unexpected instruction: {instr}")
 

@@ -7,11 +7,14 @@ from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
+from src.core.instructions.memory import Instruction_put
+from src.core.instructions.memory.load import Instruction_load
+from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add, Instruction_sub
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive, PrimitiveType
-from src.core.type import Type
+from src.core.type import Pointer, Type
 from src.core.variable import Parameter, Variable
 from src.parser import tokens as t
 from src.parser.lexer import Lexer
@@ -29,6 +32,7 @@ class Parser:
     def parse(self, source_code: str) -> list[Derective]:
         self._ast.clear()
         self._tokens = self._lexer.tokenize(source_code)
+        # print(*self._tokens, sep="\n")
         while not self._is_at_end():
             current_token = self._lookup_curr()
 
@@ -77,10 +81,6 @@ class Parser:
         return Block(name=name, body=body)
 
     def _parse_instruction(self) -> Instruction | None:
-        next_token = self._lookup_next()
-        if isinstance(next_token, t.EQUAL):
-            return self._parse_assignable()
-
         curr_token = self._lookup_curr()
         if isinstance(curr_token, t.RET):
             return self._parse_ret()
@@ -90,6 +90,20 @@ class Parser:
             return self._parse_cbr()
         elif isinstance(curr_token, t.SWITCH):
             return self._parse_switch()
+        elif isinstance(curr_token, t.PUT):
+            return self._parse_put()
+
+        next_token = self._lookup_next()
+        # Assign with typed / untyped variable
+        if isinstance(next_token, (t.COLON, t.EQUAL)):
+            return self._parse_assignable()
+
+    def _parse_put(self) -> Instruction_put:
+        self._safe_consume(t.PUT)
+        prim = self._parse_primitive()
+        self._safe_consume(t.COMMA)
+        var = self._parse_variable()
+        return Instruction_put(var=var, primitive=prim)
 
     def _parse_br(self) -> Instruction_br:
         self._safe_consume(t.BR)
@@ -166,6 +180,14 @@ class Parser:
             rhs = self._parse_variable()
             return Instruction_sub(var_out=var, lhs=lhs, rhs=rhs)
 
+        elif isinstance(curr_token, t.SALLOC):
+            type = self._parse_type()
+            return Instruction_salloc(var_out=var, type=type)
+
+        elif isinstance(curr_token, t.LOAD):
+            var_src = self._parse_variable()
+            return Instruction_load(var_out=var, var=var_src)
+
         else:
             raise ValueError(f"Unexpected token {curr_token}")
 
@@ -184,14 +206,17 @@ class Parser:
         else:
             raise ValueError(f"Parameter {var.name} must have a type")
 
-    def _parse_type(self) -> Type | PrimitiveType:
+    def _parse_type(self) -> Type | PrimitiveType | Pointer:
         name = self._safe_consume(t.IDENTIFIER).string
-
+        type = Type(name)
         if name.startswith("u") and name[1:].isdigit():
             size = int(name[1:])
-            return Usize_t(size=size)
+            type = Usize_t(size=size)
 
-        return Type(name)
+        if isinstance(self._lookup_curr(), t.STAR):
+            self._safe_consume(t.STAR)
+            type = Pointer(type)
+        return type
 
     def _parse_primitive(self) -> Primitive:
         curr_token = self._consume()

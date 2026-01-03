@@ -57,6 +57,9 @@ class Lexer:
                     else:
                         self._append_token(t.EQUAL)
 
+                case "*":
+                    self._append_token(t.STAR)
+
                 # Punctuation
                 case "$":
                     self._append_token(t.DOLLAR)
@@ -111,6 +114,12 @@ class Lexer:
                 self._append_token(t.ADD)
             case "sub":
                 self._append_token(t.SUB)
+            case "salloc":
+                self._append_token(t.SALLOC)
+            case "put":
+                self._append_token(t.PUT)
+            case "load":
+                self._append_token(t.LOAD)
             case _:
                 self._append_token(t.IDENTIFIER)
 

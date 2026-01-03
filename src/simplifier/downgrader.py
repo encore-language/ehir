@@ -20,6 +20,9 @@ SKIPABLE = (
     Instruction_add,
     Instruction_call,
     Instruction_switch,
+    Instruction_salloc,
+    Instruction_load,
+    Instruction_put,
 )
 
 
