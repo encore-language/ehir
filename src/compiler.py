@@ -17,14 +17,15 @@ class Compiler:
 
         resolver = Resolver()
         resolver.run(ast)
+        # print(*ast, sep="\n")
 
         downgrader = Downgrader()
         downgrader.run(ast)
-        print(*ast, sep="\n")
+        # print(*ast, sep="\n")
 
         normalizer = Normalizer()
         normalizer.run(ast)
-        # print(*ast, sep="\n")
+        print(*ast, sep="\n")
 
         codegen = Codegen()
         codegen.run(ast)

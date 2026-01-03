@@ -60,6 +60,12 @@ class Lexer:
                 case "*":
                     self._append_token(t.STAR)
 
+                case "<":
+                    self._append_token(t.LESS)
+
+                case ">":
+                    self._append_token(t.GREATER)
+
                 # Punctuation
                 case "$":
                     self._append_token(t.DOLLAR)
@@ -98,8 +104,24 @@ class Lexer:
         match self._string:
             case "fn":
                 self._append_token(t.FN)
+            case "struct":
+                self._append_token(t.STRUCT)
             case "cpos":
                 self._append_token(t.CPOS)
+            case "cpoh":
+                self._append_token(t.CPOH)
+            case "csos":
+                self._append_token(t.CSOS)
+            case "csoh":
+                self._append_token(t.CSOH)
+            case "pcast":
+                self._append_token(t.PCAST)
+            case "getptr":
+                self._append_token(t.GETPTR)
+            case "getfield":
+                self._append_token(t.GETFIELD)
+            case "getfieldptr":
+                self._append_token(t.GETFIELDPTR)
             case "call":
                 self._append_token(t.CALL)
             case "br":
@@ -122,8 +144,6 @@ class Lexer:
                 self._append_token(t.LOAD)
             case "halloc":
                 self._append_token(t.HALLOC)
-            case "cpoh":
-                self._append_token(t.CPOH)
             case "hfree":
                 self._append_token(t.HFREE)
             case _:

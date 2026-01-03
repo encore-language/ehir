@@ -11,4 +11,4 @@ class Instruction_pcast(Assignable):
     type: PrimitiveType
 
     def __str__(self) -> str:
-        return f"{str(super())}pcast {self.var}, {self.type}"
+        return f"{super().__str__()}pcast {self.var}, {self.type}"

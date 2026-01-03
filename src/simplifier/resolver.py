@@ -1,29 +1,41 @@
-from src.core.derectives import Derective_fn
+from src.core.derectives import Derective_fn, Derective_struct
 from src.core.derectives.base import Derective
-from src.core.instructions.capture import Instruction_cpoh
+from src.core.instructions.capture import Instruction_cpoh, Instruction_csoh, Instruction_csos
 from src.core.instructions.capture.cpos import Instruction_cpos
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_hfree, Instruction_put
+from src.core.instructions.memory import (
+    Instruction_getfield,
+    Instruction_getfieldptr,
+    Instruction_getptr,
+    Instruction_hfree,
+    Instruction_pcast,
+    Instruction_put,
+)
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
 from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.instructions.special.call import Instruction_call
+from src.core.primitives.base import PrimitiveType
 from src.core.type import Pointer
 from src.core.variable import Variable
 
 
 class Resolver:
     fn: dict[str, Derective_fn]
+    structs: dict[str, Derective_struct]
 
     def run(self, ast: list[Derective]):
         self.fn = {}
+        self.structs = {}
 
         for derective in ast:
             if isinstance(derective, Derective_fn):
                 self.fn[derective.name] = derective
+            elif isinstance(derective, Derective_struct):
+                self.structs[derective.name] = derective
 
         for fn in self.fn.values():
             self._resolve(fn)
@@ -62,16 +74,76 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
+                elif isinstance(instr, (Instruction_csos, Instruction_csoh)):
+                    expected_type = Pointer(instr.struct.as_type())
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+
+                    for i, arg in enumerate(instr.struct.args):
+                        expected_type = self.structs[instr.struct.name].params[i].type
+
+                        if arg.type is not None and arg.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for argument {i} of struct '{instr.struct.name}': {arg.type} != {expected_type}"
+                            )
+                        arg.type = expected_type
+                        add_variable(arg)
+
+                elif isinstance(instr, (Instruction_getfield, Instruction_getfieldptr)):
+                    instr.src = add_variable(instr.src)
+
+                    # step 0: resolve full chain
+                    assert len(instr.indexes) > 0
+                    curr = instr.src
+                    for next in instr.indexes:
+                        assert curr.type is not None
+                        if isinstance(curr.type, PrimitiveType):
+                            raise TypeError(f"Cannot access field of primitive type '{curr.type}'")
+
+                        if (corresponding_struct := self.structs.get(curr.type.name, None)) is None:
+                            raise TypeError(f"Unknown struct '{curr.type.name}'")
+
+                        assert isinstance(next, Variable)
+                        next_name = next.name
+                        for i, param in enumerate(corresponding_struct.params):
+                            if param.name == next_name:
+                                if next.type and next.type != param.type:
+                                    raise TypeError(
+                                        f"Type mismatch for field '{next_name}' in struct '{curr.type.name}': {next.type} != {param.type}"
+                                    )
+                                next.type = param.type
+                                next.name = str(i)
+                                break
+                        else:
+                            raise TypeError(f"Unknown field '{next_name}' in struct '{curr.type.name}'")
+                        curr = next
+
+                    assert curr.type is not None
+                    expected_type = curr.type if isinstance(instr, Instruction_getfield) else Pointer(curr.type)
+
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+
                 elif isinstance(instr, Instruction_ret):
                     expected_type = fn.ret_type
                     if instr.var.type and instr.var.type != expected_type:
                         raise TypeError(f"Type mismatch for return value: {instr.var.type} != {expected_type}")
                     instr.var.type = expected_type
                     instr.var = add_variable(instr.var)
+
                 elif isinstance(instr, Instruction_add):
                     instr.var_out = add_variable(instr.var_out)
                     instr.lhs = add_variable(instr.lhs)
                     instr.rhs = add_variable(instr.rhs)
+
                 elif isinstance(instr, Instruction_call):
                     target_fn = self.fn[instr.fn_name]
                     expected_type = target_fn.ret_type
@@ -107,9 +179,40 @@ class Resolver:
                     instr.var = add_variable(instr.var)
                 elif isinstance(instr, Instruction_load):
                     instr.var = add_variable(instr.var)
+                    if instr.var.type is not None:
+                        if instr.var_out.type is not None and instr.var_out.type != Pointer(instr.var.type):
+                            raise TypeError(
+                                f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {Pointer(instr.var.type)}"
+                            )
+                        assert isinstance(instr.var.type, Pointer)
+                        instr.var_out.type = instr.var.type.pointee
                     instr.var_out = add_variable(instr.var_out)
                 elif isinstance(instr, Instruction_hfree):
                     instr.var = add_variable(instr.var)
+                elif isinstance(instr, Instruction_pcast):
+                    instr.var = add_variable(instr.var)
+
+                    expected_type = instr.type
+                    if instr.var_out.type is not None:
+                        if instr.var_out.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                            )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+
+                elif isinstance(instr, Instruction_getptr):
+                    instr.var = add_variable(instr.var)
+                    if instr.var.type is not None:
+                        expected_type = Pointer(instr.var.type)
+
+                        if instr.var_out.type and instr.var.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for variable '{instr.var.name}': {instr.var.type} != {expected_type}"
+                            )
+                        instr.var_out.type = expected_type
+
+                    instr.var_out = add_variable(instr.var_out)
                 else:
                     raise ValueError(f"Unexpected instruction: {instr}")
 

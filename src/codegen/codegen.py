@@ -1,13 +1,21 @@
 import llvmlite.binding as llvm
 import llvmlite.ir as ir
 
+from src.codegen.opt import OptConfig, Optimizer, OptLevel
 from src.core.block import TerminatedBlock
-from src.core.derectives import Derective_fn
+from src.core.derectives import Derective_fn, Derective_struct
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_hfree, Instruction_put
+from src.core.instructions.memory import (
+    Instruction_getfieldptr,
+    Instruction_getptr,
+    Instruction_hfree,
+    Instruction_pcast,
+    Instruction_put,
+    Instruction_store,
+)
 from src.core.instructions.memory.halloc import Instruction_halloc
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
@@ -15,7 +23,7 @@ from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive
-from src.core.type import Type
+from src.core.type import Pointer, Type
 
 
 class Codegen:
@@ -30,6 +38,7 @@ class Codegen:
         self.module = ir.Module()
         self.builder = ir.IRBuilder()
         self._variables: dict[str, object] = {}
+        self._structs: dict[str, ir.LiteralStructType] = {}
 
     def run(self, ast: list[Derective]):
         # step 0: build all function declarations
@@ -38,16 +47,24 @@ class Codegen:
                 self._codegen_fn_decl(derective)
 
         # step 1: build all function bodies
-        for derective in ast:
-            self._codegen_derective(derective)
+        try:
+            for derective in ast:
+                self._codegen_derective(derective)
+        except Exception as e:
+            print(self.module)
+            print(f"Error occurred during code generation: {e}")
+            return
 
+        # step 2: Optimize the modul
         print("============ LLVM IR DEBUG ===============")
-        llvm_ir = str(self.module)
-        print(llvm_ir)
-        print("============ LLVM IR VERIFY ==============")
-        a = llvm.parse_assembly(llvm_ir)
-        a.verify()
-        print(a)
+        print(self.module)
+
+        print("============ LLVM IR OPTIM ==============")
+        config = OptConfig(level=OptLevel.O1)
+        optimizer = Optimizer(config)
+        module = optimizer.optimize(self.module)
+
+        print(module)
 
     def _codegen_fn_decl(self, fn: Derective_fn):
         func_type = ir.FunctionType(self._build_type(fn.ret_type), [self._build_type(t.type) for t in fn.params])
@@ -56,8 +73,17 @@ class Codegen:
     def _codegen_derective(self, derective: Derective):
         if isinstance(derective, Derective_fn):
             self._codegen_fn_body(derective)
+        elif isinstance(derective, Derective_struct):
+            self._codegen_struct_body(derective)
         else:
             raise NotImplementedError(f"Unsupported derective type: {type(derective)}")
+
+    def _codegen_struct_body(self, struct: Derective_struct):
+        field_types = [self._build_type(param.type) for param in struct.params]
+        struct_type = ir.LiteralStructType(field_types)
+        if struct.name in self._structs:
+            raise ValueError(f"Struct '{struct.name}' already exists")
+        self._structs[struct.name] = struct_type
 
     def _codegen_fn_body(self, fn: Derective_fn):
         func = [f for f in self.module.functions if f.name == fn.name][0]
@@ -102,15 +128,109 @@ class Codegen:
             self._build_switch(instr)
         elif isinstance(instr, Instruction_hfree):
             self._build_hfree(instr)
+        elif isinstance(instr, Instruction_store):
+            self._build_store(instr)
+        elif isinstance(instr, Instruction_pcast):
+            self._build_pcast(instr)
+        elif isinstance(instr, Instruction_getfieldptr):
+            self._build_getfieldptr(instr)
+        elif isinstance(instr, Instruction_getptr):
+            self._build_getptr(instr)
         else:
             raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
+
+    def _build_getptr(self, instr: Instruction_getptr):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+
+        assert instr.var.type is not None
+        type = self._build_type(instr.var.type)
+        ptr = self.builder.alloca(type, name=instr.var.name)
+        self._variables[instr.var.name] = ptr
+
+    def _build_getptr(self, instr: Instruction_getptr):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+
+        assert instr.var.type is not None
+        dst_type = self._build_type(instr.var.type)
+
+        alloca = self.builder.alloca(dst_type, name=instr.var_out.name)
+        self.builder.store(self._variables[instr.var.name], alloca)
+        self._variables[instr.var_out.name] = alloca
+
+    def _build_pcast(self, instr: Instruction_pcast):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+
+        value = self._variables[instr.var.name]
+        assert hasattr(value, "type")
+        src_type = value.type
+
+        assert instr.var.type is not None
+        dst_type = self._build_type(instr.type)
+
+        # Cast
+        ## Same
+        if src_type == dst_type:
+            return
+
+        result = None
+        ## Int to Int
+        if isinstance(src_type, ir.IntType) and isinstance(dst_type, ir.IntType):
+            src_width = src_type.width
+            dst_width = dst_type.width
+
+            if src_width < dst_width:
+                result = self.builder.zext(value, dst_type, name=instr.var_out.name)
+            elif src_width > dst_width:
+                result = self.builder.trunc(value, dst_type, name=instr.var_out.name)
+            else:
+                raise RuntimeError("Unreachable")
+
+        else:
+            raise NotImplementedError(f"Unsupported cast: {src_type} -> {dst_type}")
+
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_store(self, instr: Instruction_store):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        value = self._variables[instr.var_src.name]
+        ptr = self._variables[instr.var_dst.name]
+        self.builder.store(value, ptr)
+
+    def _build_getfieldptr(self, instr: Instruction_getfieldptr):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        base = self._variables[instr.src.name]
+        assert hasattr(base, "type")
+        if not isinstance(base.type, ir.PointerType):
+            # Создаём временный указатель на стеке
+            temp = self.builder.alloca(base.type)
+            self.builder.store(base, temp)
+            base = temp
+
+        # 3. Готовим индексы
+        indices = [ir.Constant(ir.IntType(32), 0)]  # разыменование
+        for idx_var in instr.indexes:
+            indices.append(ir.Constant(ir.IntType(32), int(idx_var.name)))
+
+        # 4. Вычисляем указатель на поле
+        result = self.builder.gep(base, indices, name=instr.var_out.name)
+
+        # 5. Сохраняем результат
+        self._variables[instr.var_out.name] = result
+
+        return result
 
     def _build_salloc(self, instr: Instruction_salloc):
         self.builder.comment("")
         self.builder.comment(f"{instr}")
 
         byte_size = self._sizeof(instr.type)
-        ptr = self.builder.alloca(ir.IntType(8), size=byte_size)
+        ptr = self.builder.alloca(ir.IntType(8), size=byte_size, name=f".salloc_{instr.var_out.name}")
         target_type = self._build_type(instr.type)
         casted_ptr = self.builder.bitcast(ptr, ir.PointerType(target_type), name=instr.var_out.name)
         self._variables[instr.var_out.name] = casted_ptr
@@ -146,7 +266,7 @@ class Codegen:
         self.builder.comment("")
         self.builder.comment(f"{instr}")
         ptr = self._variables[instr.var.name]
-        value = self.builder.load(ptr)
+        value = self.builder.load(ptr, name=instr.var_out.name)
         self._variables[instr.var_out.name] = value
         return value
 
@@ -155,7 +275,7 @@ class Codegen:
         self.builder.comment(f"{instr}")
         left = self._variables[instr.lhs.name]
         right = self._variables[instr.rhs.name]
-        result = self.builder.add(left, right)
+        result = self.builder.add(left, right, name=instr.var_out.name)
         self._variables[instr.var_out.name] = result
         return result
 
@@ -198,7 +318,15 @@ class Codegen:
     def _build_type(self, type: Type) -> ir.Type:
         if isinstance(type, Usize_t):
             return ir.IntType(bits=type.size)
-        raise NotImplementedError(f"Unsupported type: {type}")
+
+        if type.name not in self._structs:
+            raise ValueError(f"Struct '{type.name}' not found")
+        struct: ir.LiteralStructType = self._structs[type.name]
+
+        if isinstance(type, Pointer):
+            return ir.PointerType(struct)
+
+        return struct
 
     def _build_primitive(self, prim: Primitive) -> ir.Constant:
         if isinstance(prim, Usize):
@@ -207,17 +335,11 @@ class Codegen:
 
     def _sizeof(self, type: Type):
         t = self._build_type(type)
-
-        # Null pointer типа ptr<T>
         null_ptr_type = ir.PointerType(t)
         null_ptr = ir.Constant(null_ptr_type, None)
-
-        # GEP: &null_ptr[1] = sizeof(T)
         one = ir.Constant(ir.IntType(32), 1)
-        size_ptr = self.builder.gep(null_ptr, [one])
-
-        # Convert to integer
-        return self.builder.ptrtoint(size_ptr, ir.IntType(64))
+        size_ptr = self.builder.gep(null_ptr, [one], name=f".sizeof_{type.name}_ptr")
+        return self.builder.ptrtoint(size_ptr, ir.IntType(64), name=f".sizeof_{type.name}_")
 
     def _get_malloc_function(self) -> ir.Function:
         """Получает или объявляет функцию malloc."""
