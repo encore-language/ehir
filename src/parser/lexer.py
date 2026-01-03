@@ -51,7 +51,11 @@ class Lexer:
                     self._append_token(t.PLUS)
 
                 case "=":
-                    self._append_token(t.EQUAL)
+                    if self._lookup_curr() == ">":
+                        self._consume()
+                        self._append_token(t.BOLD_ARROW)
+                    else:
+                        self._append_token(t.EQUAL)
 
                 # Punctuation
                 case "$":
@@ -85,7 +89,7 @@ class Lexer:
         self._append_token(t.NUMBER)
 
     def _parse_identifier(self):
-        while self._lookup_curr().isalnum():
+        while self._lookup_curr().isalnum() or self._lookup_curr() == "_":
             self._consume()
 
         match self._string:
@@ -95,6 +99,12 @@ class Lexer:
                 self._append_token(t.CPOS)
             case "call":
                 self._append_token(t.CALL)
+            case "br":
+                self._append_token(t.BR)
+            case "cbr":
+                self._append_token(t.CBR)
+            case "switch":
+                self._append_token(t.SWITCH)
             case "ret":
                 self._append_token(t.RET)
             case "add":

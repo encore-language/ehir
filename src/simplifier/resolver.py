@@ -1,7 +1,10 @@
 from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.capture.cpos import Instruction_cpos
+from src.core.instructions.control_flow.br import Instruction_br
+from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.control_flow.switch import Instruction_switch
 from src.core.instructions.operators.arithmetic import Instruction_add
 from src.core.instructions.special.call import Instruction_call
 from src.core.variable import Variable
@@ -74,7 +77,12 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
 
                     instr.args = [add_variable(arg) for arg in instr.args]
-
+                elif isinstance(instr, Instruction_br):
+                    pass
+                elif isinstance(instr, Instruction_cbr):
+                    instr.cond_var = add_variable(instr.cond_var)
+                elif isinstance(instr, Instruction_switch):
+                    instr.cond_var = add_variable(instr.cond_var)
                 else:
                     raise ValueError(f"Unexpected instruction: {instr}")
 

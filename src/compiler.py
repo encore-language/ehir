@@ -14,7 +14,6 @@ class Compiler:
 
         parser = Parser()
         ast = parser.parse(source_code)
-        print(*ast, sep="\n")
 
         resolver = Resolver()
         resolver.run(ast)
@@ -24,6 +23,7 @@ class Compiler:
 
         normalizer = Normalizer()
         normalizer.run(ast)
+        print(*ast, sep="\n")
 
         codegen = Codegen()
         codegen.run(ast)

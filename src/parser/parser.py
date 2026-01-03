@@ -3,7 +3,10 @@ from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
 from src.core.instructions.capture import Instruction_cpos
+from src.core.instructions.control_flow.br import Instruction_br
+from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.control_flow.switch import Instruction_switch
 from src.core.instructions.operators.arithmetic import Instruction_add, Instruction_sub
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
@@ -63,8 +66,7 @@ class Parser:
         return Derective_fn(name=name, params=params, ret_type=ret_type, body=body)
 
     def _parse_block(self) -> Block:
-        self._safe_consume(t.DOLLAR)
-        name = self._safe_consume(t.IDENTIFIER).string
+        name = self._parse_block_label()
         self._safe_consume(t.COLON)
 
         body: list[Instruction] = []
@@ -82,11 +84,53 @@ class Parser:
         curr_token = self._lookup_curr()
         if isinstance(curr_token, t.RET):
             return self._parse_ret()
+        elif isinstance(curr_token, t.BR):
+            return self._parse_br()
+        elif isinstance(curr_token, t.CBR):
+            return self._parse_cbr()
+        elif isinstance(curr_token, t.SWITCH):
+            return self._parse_switch()
+
+    def _parse_br(self) -> Instruction_br:
+        self._safe_consume(t.BR)
+        label = self._parse_block_label()
+        return Instruction_br(label)
+
+    def _parse_cbr(self) -> Instruction_cbr:
+        self._safe_consume(t.CBR)
+        cond = self._parse_variable()
+        self._safe_consume(t.COMMA)
+        true_br = self._parse_block_label()
+        self._safe_consume(t.COMMA)
+        else_br = self._parse_block_label()
+
+        return Instruction_cbr(cond_var=cond, true_br_label=true_br, else_br_label=else_br)
+
+    def _parse_switch(self) -> Instruction_switch:
+        self._safe_consume(t.SWITCH)
+        cond_var = self._parse_variable()
+        self._safe_consume(t.COMMA)
+        default_label = self._parse_block_label()
+
+        cases = []
+        self._safe_consume(t.LEFT_BRACE)
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
+            val = self._parse_primitive()
+            assert isinstance(val, Usize), "Switch case value must be a usize"
+            self._safe_consume(t.BOLD_ARROW)
+            label = self._parse_block_label()
+            cases.append((val, label))
+        self._safe_consume(t.RIGHT_BRACE)
+        return Instruction_switch(cond_var=cond_var, default_case=default_label, cases=cases)
 
     def _parse_ret(self) -> Instruction_ret:
         self._safe_consume(t.RET)
         var = self._parse_variable()
         return Instruction_ret(var)
+
+    def _parse_block_label(self) -> str:
+        self._safe_consume(t.DOLLAR)
+        return self._safe_consume(t.IDENTIFIER).string
 
     def _parse_assignable(self) -> Instruction:
         var = self._parse_variable()

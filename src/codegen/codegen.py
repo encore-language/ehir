@@ -6,6 +6,7 @@ from src.core.derectives import Derective_fn
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
 from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.control_flow.switch import Instruction_switch
 from src.core.instructions.memory import Instruction_put
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
@@ -66,9 +67,13 @@ class Codegen:
             self._variables[param_name] = param
             param.name = param_name
 
+        ir_blocks = []
         for block in fn.body:
             assert isinstance(block, TerminatedBlock)
             ir_block = func.append_basic_block(block.name)
+            ir_blocks.append(ir_block)
+
+        for block, ir_block in zip(fn.body, ir_blocks):
             self.builder.position_at_end(ir_block)
             self._build_block(block)
 
@@ -90,6 +95,8 @@ class Codegen:
             self._build_add(instr)
         elif isinstance(instr, Instruction_call):
             self._build_call(instr)
+        elif isinstance(instr, Instruction_switch):
+            self._build_switch(instr)
         else:
             raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
 
@@ -136,6 +143,26 @@ class Codegen:
         result = self.builder.call(func, args)
         self._variables[instr.var_out.name] = result
         return result
+
+    def _build_switch(self, instr: Instruction_switch):
+        self.builder.comment("")
+        self.builder.comment("switch")
+        cond_value = self._variables[instr.cond_var.name]
+
+        blocks_mapping: dict[str, ir.Block] = {}
+        for ir_block in self.builder.function.blocks:
+            blocks_mapping[ir_block.name] = ir_block
+
+        default_block = blocks_mapping[instr.default_case]
+        switch = self.builder.switch(cond_value, default_block)
+        for case_value, block_name in instr.cases:
+            # Преобразуем значение в константу
+            const_val = self._build_primitive(case_value)
+            # Находим целевой блок
+            target_block = blocks_mapping[block_name]
+
+            # Добавляем в switch
+            switch.add_case(const_val, target_block)
 
     def _build_ret(self, instr: Instruction_ret):
         self.builder.comment("")

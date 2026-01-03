@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core.variable import Variable
+from src.core.variable import Variable
 
 from .base import ControlFlow
 
@@ -12,4 +12,4 @@ class Instruction_cbr(ControlFlow):
     else_br_label: str
 
     def __str__(self) -> str:
-        return f"cbr {self.cond_var}, {self.true_br_label}, {self.else_br_label}"
+        return f"cbr {self.cond_var}, ${self.true_br_label}, ${self.else_br_label}"

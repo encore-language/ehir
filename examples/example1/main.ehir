@@ -1,8 +1,17 @@
 fn main() -> u8 {
   $entry:
     var = cpos 0_u8
+    switch var, $default {
+        0_u8 => $case_zero
+        1_u8 => $case_one
+    }
+  $case_zero:
     res = call increment(var)
     ret res
+  $case_one:
+    cbr var, $case_zero, $default
+  $default:
+    br $case_zero
 }
 
 fn increment(value: u8) -> u8 {
