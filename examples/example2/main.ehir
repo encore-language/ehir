@@ -1,0 +1,8 @@
+fn main() -> u8 {
+  $entry:
+    var = cpoh 0_u8
+    hfree var
+    zero_ptr = cpos 0_u8
+    zero = load zero_ptr
+    ret zero
+}

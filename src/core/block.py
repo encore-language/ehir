@@ -1,0 +1,25 @@
+from dataclasses import dataclass
+
+from src.core.instructions.base import Instruction
+from src.core.instructions.control_flow.base import ControlFlow
+
+
+@dataclass
+class Block:
+    name: str
+    body: list[Instruction]
+
+    def __str__(self) -> str:
+        body_repr = "\n".join("\n".join(f"  {line}" for line in str(b).splitlines()) for b in self._get_instructions())
+        return f"${self.name}:\n{body_repr}"
+
+    def _get_instructions(self) -> list[Instruction]:
+        return self.body
+
+
+@dataclass
+class TerminatedBlock(Block):
+    term: ControlFlow
+
+    def _get_instructions(self) -> list[Instruction]:
+        return [*self.body, self.term]

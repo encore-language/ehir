@@ -1,0 +1,26 @@
+struct MyStruct {
+    field1: u32
+    field2: u16
+}
+
+
+fn main() -> u16 {
+  $entry:
+     field1_ptr = cpos 15_u32
+     field2_ptr = cpos 16_u16
+
+     field1 = load field1_ptr
+     field2 = load field2_ptr
+     my_struct_stack = csos MyStruct(field1, field2)
+     br $out
+  $out:
+     f1_s = getfield my_struct_stack > field1
+     f2_s_ptr = getfieldptr my_struct_stack > field2 : u16
+     f2_s = load f2_s_ptr
+
+     f1_u16 = pcast f1_s, u16
+     f1_u16_ptr = getptr f1_u16
+     f1_result = load f1_u16_ptr
+     res = add f1_result, f2_s
+     ret res
+}
