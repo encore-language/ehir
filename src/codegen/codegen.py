@@ -19,7 +19,12 @@ from src.core.instructions.memory import (
 from src.core.instructions.memory.halloc import Instruction_halloc
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
-from src.core.instructions.operators.arithmetic import Instruction_add
+from src.core.instructions.operators.arithmetic import (
+    Instruction_add,
+    Instruction_div,
+    Instruction_mul,
+    Instruction_sub,
+)
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive
@@ -39,21 +44,29 @@ class Codegen:
         self.builder = ir.IRBuilder()
         self._variables: dict[str, object] = {}
         self._structs: dict[str, ir.LiteralStructType] = {}
+        # self._structs: dict[str, ir.LiteralStructType] = {}
 
     def run(self, ast: list[Derective]):
-        # step 0: build all function declarations
+        # step 0: Build all struct declarations
+        for derective in ast:
+            if isinstance(derective, Derective_struct):
+                self._codegen_struct_decl(derective)
+
+        # step 1: build all structure bodies
+        for derective in ast:
+            if isinstance(derective, Derective_struct):
+                self._codegen_struct_body(derective)
+
+        # step 2: build all function and structure declarations
         for derective in ast:
             if isinstance(derective, Derective_fn):
                 self._codegen_fn_decl(derective)
 
-        # step 1: build all function bodies
-        try:
-            for derective in ast:
-                self._codegen_derective(derective)
-        except Exception as e:
-            print(self.module)
-            print(f"Error occurred during code generation: {e}")
-            return
+        print(self.module)
+        # step 3: build all function bodies
+        for derective in ast:
+            if isinstance(derective, Derective_fn):
+                self._codegen_fn_body(derective)
 
         # step 2: Optimize the modul
         print("============ LLVM IR DEBUG ===============")
@@ -66,9 +79,23 @@ class Codegen:
 
         print(module)
 
+    def _codegen_struct_decl(self, struct: Derective_struct):
+        st = ir.LiteralStructType([])
+        if struct.name in self._structs:
+            raise ValueError(f"Struct '{struct.name}' already declared")
+        self._structs[struct.name] = st
+
     def _codegen_fn_decl(self, fn: Derective_fn):
-        func_type = ir.FunctionType(self._build_type(fn.ret_type), [self._build_type(t.type) for t in fn.params])
-        ir.Function(self.module, func_type, name=fn.name)
+        ret_type = self._build_type(fn.ret_type)
+        param_types = [self._build_type(t.type) for t in fn.params]
+
+        func_type = ir.FunctionType(ret_type, param_types)
+        func = ir.Function(self.module, func_type, name=fn.name)
+
+        for i, param in enumerate(func.args):
+            param.name = fn.params[i].name
+
+        return func
 
     def _codegen_derective(self, derective: Derective):
         if isinstance(derective, Derective_fn):
@@ -79,11 +106,9 @@ class Codegen:
             raise NotImplementedError(f"Unsupported derective type: {type(derective)}")
 
     def _codegen_struct_body(self, struct: Derective_struct):
+        struct_type = self._structs[struct.name]
         field_types = [self._build_type(param.type) for param in struct.params]
-        struct_type = ir.LiteralStructType(field_types)
-        if struct.name in self._structs:
-            raise ValueError(f"Struct '{struct.name}' already exists")
-        self._structs[struct.name] = struct_type
+        struct_type.elements = field_types
 
     def _codegen_fn_body(self, fn: Derective_fn):
         func = [f for f in self.module.functions if f.name == fn.name][0]
@@ -122,6 +147,12 @@ class Codegen:
             self._build_ret(instr)
         elif isinstance(instr, Instruction_add):
             self._build_add(instr)
+        elif isinstance(instr, Instruction_sub):
+            self._build_sub(instr)
+        elif isinstance(instr, Instruction_mul):
+            self._build_mul(instr)
+        elif isinstance(instr, Instruction_div):
+            self._build_div(instr)
         elif isinstance(instr, Instruction_call):
             self._build_call(instr)
         elif isinstance(instr, Instruction_switch):
@@ -273,6 +304,33 @@ class Codegen:
         self._variables[instr.var_out.name] = result
         return result
 
+    def _build_sub(self, instr: Instruction_sub):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.sub(left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_mul(self, instr: Instruction_mul):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.mul(left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_div(self, instr: Instruction_div):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.sdiv(left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
     def _build_call(self, instr: Instruction_call):
         self.builder.comment("")
         self.builder.comment(f"{instr}")
@@ -311,7 +369,7 @@ class Codegen:
 
         if type.name not in self._structs:
             raise ValueError(f"Struct '{type.name}' not found")
-        struct: ir.LiteralStructType = self._structs[type.name]
+        struct = self._structs[type.name]
 
         if isinstance(type, Pointer):
             return ir.PointerType(struct)

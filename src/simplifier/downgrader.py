@@ -18,7 +18,12 @@ from src.core.instructions.memory import (
 from src.core.instructions.memory.halloc import Instruction_halloc
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
-from src.core.instructions.operators.arithmetic import Instruction_add
+from src.core.instructions.operators.arithmetic import (
+    Instruction_add,
+    Instruction_div,
+    Instruction_mul,
+    Instruction_sub,
+)
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.type import Pointer
@@ -27,6 +32,9 @@ from src.core.variable import TypedVariable
 SKIPABLE = (
     Instruction_ret,
     Instruction_add,
+    Instruction_sub,
+    Instruction_mul,
+    Instruction_div,
     Instruction_call,
     Instruction_switch,
     Instruction_salloc,

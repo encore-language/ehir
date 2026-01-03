@@ -16,7 +16,12 @@ from src.core.instructions.memory import (
 )
 from src.core.instructions.memory.load import Instruction_load
 from src.core.instructions.memory.salloc import Instruction_salloc
-from src.core.instructions.operators.arithmetic import Instruction_add
+from src.core.instructions.operators.arithmetic import (
+    Instruction_add,
+    Instruction_div,
+    Instruction_mul,
+    Instruction_sub,
+)
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives.base import PrimitiveType
 from src.core.type import Pointer
@@ -139,7 +144,7 @@ class Resolver:
                     instr.var.type = expected_type
                     instr.var = add_variable(instr.var)
 
-                elif isinstance(instr, Instruction_add):
+                elif isinstance(instr, (Instruction_add, Instruction_sub, Instruction_mul, Instruction_div)):
                     instr.var_out = add_variable(instr.var_out)
                     instr.lhs = add_variable(instr.lhs)
                     instr.rhs = add_variable(instr.rhs)
