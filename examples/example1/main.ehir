@@ -1,6 +1,7 @@
 fn main() -> u8 {
   $entry:
-    var = cpos 0_u8
+    var_ptr = cpos 0_u8
+    var = load var_ptr
     switch var, $default {
         0_u8 => $case_zero
         1_u8 => $case_one
@@ -16,7 +17,8 @@ fn main() -> u8 {
 
 fn increment(value: u8) -> u8 {
   $entry:
-    one = cpos 1_u8
+    one_ptr = cpos 1_u8
+    one = load one_ptr
     res = add value, one
     ret res
 }

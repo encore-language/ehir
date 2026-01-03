@@ -2,7 +2,7 @@ from pathlib import Path
 
 from src.compiler import Compiler
 
-PROGRAM_PATH = Path().resolve() / "examples" / "example3" / "main.ehir"
+PROGRAM_PATH = Path().resolve() / "examples" / "example2" / "main.ehir"
 
 
 def main():
