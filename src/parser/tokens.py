@@ -4,6 +4,8 @@ from dataclasses import dataclass
 @dataclass
 class Token:
     string: str
+    line: int
+    column: int
 
 
 class IDENTIFIER(Token): ...
@@ -16,6 +18,9 @@ class ARROW(Token): ...
 
 
 class BOLD_ARROW(Token): ...
+
+
+class UNKNOWN(Token): ...
 
 
 class EOF(Token): ...

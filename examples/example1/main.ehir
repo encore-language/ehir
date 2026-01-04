@@ -1,5 +1,5 @@
 fn main() -> u8 {
-  $entry:
+  $entry
     var_ptr = cpos 0_u8
     var = load var_ptr
     switch var, $default {

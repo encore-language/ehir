@@ -315,15 +315,15 @@ class Parser:
         raise ValueError(f"Expected number, got {curr_token}")
 
     def _lookup_curr(self) -> t.Token:
-        return t.EOF("") if self._is_at_end(0) else self._tokens[self._consumed + 0]
+        return t.EOF("", 0, 0) if self._is_at_end(0) else self._tokens[self._consumed + 0]
 
     def _lookup_next(self) -> t.Token:
-        return t.EOF("") if self._is_at_end(1) else self._tokens[self._consumed + 1]
+        return t.EOF("", 0, 0) if self._is_at_end(1) else self._tokens[self._consumed + 1]
 
     def _safe_consume(self, expected: type[t.Token]) -> t.Token:
         current_token = self._consume()
         if not isinstance(current_token, expected):
-            raise ValueError(f"Expected {expected}, got {current_token}")
+            self._trace_unexpected_token(current_token, expected)
         return current_token
 
     def _consume(self) -> t.Token:
@@ -333,3 +333,6 @@ class Parser:
 
     def _is_at_end(self, n: int = 0) -> bool:
         return self._consumed + n >= len(self._tokens)
+
+    def _trace_unexpected_token(self, token: t.Token, expected_t: type[t.Token]):
+        raise ValueError(f"Unexpected token: {token}")
