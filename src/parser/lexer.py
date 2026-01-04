@@ -1,18 +1,25 @@
+import math
+from dataclasses import dataclass, field
+
 import src.parser.tokens as t
+from src.format import ThemePalette, printfmt
+
+TRACE_MAX_LINES_FOR_UNIT = 5
 
 
+@dataclass
 class Lexer:
-    def __init__(self):
-        self._tokens = []
-        self._program = ""
-        self._column = 0
-        self._line = 0
-        self._consumed = 0
-        self._string = ""
-        self._ignored = (t.WHITESPACE, t.NEWLINE)
+    _tokens: list[t.Token] = field(default_factory=list)
+    _program: str = ""
+    _column: int = 0
+    _line: int = 0
+    _consumed: int = 0
+    _string: str = ""
+    _ignored: tuple[type[t.Token], ...] = (t.WHITESPACE, t.NEWLINE)
 
     def tokenize(self, source_code: str) -> list[t.Token]:
         self._program = source_code
+        unknown_tokens: list[t.Token] = []
 
         while not self._is_at_end():
             curr_char = self._consume()
@@ -88,7 +95,13 @@ class Lexer:
                     elif curr_char.isidentifier():
                         self._parse_identifier()
                     else:
-                        raise ValueError(f"Unexpected character '{curr_char}'")
+                        self._append_token(t.UNKNOWN)
+                        unknown_tokens.append(self._tokens.pop())
+
+        if unknown_tokens:
+            for token in unknown_tokens:
+                self._trace_unexpected_token_error(token)
+            exit(-1)
 
         return self._tokens
 
@@ -151,7 +164,7 @@ class Lexer:
 
     def _append_token(self, token_type: type[t.Token]):
         if token_type not in self._ignored:
-            self._tokens.append(token_type(self._string))
+            self._tokens.append(token_type(self._string, line=self._line, column=self._column - len(self._string)))
         self._string = ""
 
     def _lookup_curr(self) -> str:
@@ -164,7 +177,40 @@ class Lexer:
         current_char = self._program[self._consumed]
         self._string += current_char
         self._consumed += 1
+        self._column += 1
         return current_char
 
     def _is_at_end(self, shift: int = 0) -> bool:
         return self._consumed + shift >= len(self._program)
+
+    def _trace_unexpected_token_error(self, token: t.Token):
+        lines = self._program.splitlines()
+
+        num_trace_lines = min(len(lines), TRACE_MAX_LINES_FOR_UNIT)
+        trace_start_index = max(0, token.line - math.floor(num_trace_lines / 2))
+        trace_stop_index = min(len(lines), trace_start_index + math.ceil(num_trace_lines / 2) + 1)
+        indexes = [i for i in range(trace_start_index, trace_stop_index)]
+        max_index_len = max(len(str(i + 1)) for i in indexes)
+        printfmt("╔" + f"{' Error Frame ':═^64}" + "╗\n", ThemePalette.ERROR_TEXT)
+        for i in indexes:
+            printfmt(f"{i + 1:>{max_index_len}}    ", ThemePalette.BACKGROUND_TEXT)
+            line = lines[i]
+            if i == token.line:
+                # Colorize error token
+                printfmt(f"{line[: token.column]}", ThemePalette.COMMON_TEXT)
+                printfmt(f"{line[token.column : token.column + len(token.string)]}", ThemePalette.ERROR_TEXT)
+                printfmt(f"{line[token.column + len(token.string) :]}\n", ThemePalette.COMMON_TEXT)
+
+                # print error message
+                printfmt(
+                    " " * (4 + max_index_len + token.column) + "^\n",
+                    ThemePalette.ERROR_TEXT,
+                )
+                printfmt(
+                    f"  Error: Unexpected token '{token.string}' at line {token.line + 1}, column {token.column + 1}\n",
+                    ThemePalette.ERROR_TEXT,
+                )
+
+            else:
+                printfmt(f"{line}\n", ThemePalette.COMMON_TEXT)
+        printfmt("\n")
