@@ -1,6 +1,16 @@
 from src.core.derectives import Derective_fn, Derective_struct
 from src.core.derectives.base import Derective
-from src.core.instructions.capture import Instruction_cpoh, Instruction_csoh, Instruction_csos
+from src.core.instructions.capture import (
+    Instruction_cpoh,
+    Instruction_csoh,
+    Instruction_csos,
+    Instruction_lcpos,
+    Instruction_lcsos,
+    Instruction_scpoh,
+    Instruction_scpos,
+    Instruction_scsoh,
+    Instruction_scsos,
+)
 from src.core.instructions.capture.cpos import Instruction_cpos
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
@@ -24,7 +34,7 @@ from src.core.instructions.operators.arithmetic import (
 )
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives.base import PrimitiveType
-from src.core.type import Pointer
+from src.core.type import HeapSmartPointer, Pointer, StackSmartPointer
 from src.core.variable import Variable
 
 
@@ -70,8 +80,14 @@ class Resolver:
 
         for block in fn.body:
             for instr in block.body:
-                if isinstance(instr, (Instruction_cpos, Instruction_cpoh)):
-                    expected_type = Pointer(instr.primitive.type)
+                if isinstance(instr, (Instruction_cpos, Instruction_cpoh, Instruction_scpos, Instruction_scpoh)):
+                    if isinstance(instr, (Instruction_cpos, Instruction_cpoh)):
+                        pointer_t = Pointer
+                    elif isinstance(instr, Instruction_scpos):
+                        pointer_t = StackSmartPointer
+                    else:
+                        pointer_t = HeapSmartPointer
+                    expected_type = pointer_t(instr.primitive.type)
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(
                             f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
@@ -79,8 +95,14 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
-                elif isinstance(instr, (Instruction_csos, Instruction_csoh)):
-                    expected_type = Pointer(instr.struct.as_type())
+                elif isinstance(instr, (Instruction_csos, Instruction_csoh, Instruction_scsos, Instruction_scsoh)):
+                    if isinstance(instr, (Instruction_csos, Instruction_csoh)):
+                        pointer_t = Pointer
+                    elif isinstance(instr, Instruction_scsos):
+                        pointer_t = StackSmartPointer
+                    else:
+                        pointer_t = HeapSmartPointer
+                    expected_type = pointer_t(instr.struct.as_type())
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(
                             f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
@@ -88,6 +110,35 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
+                    for i, arg in enumerate(instr.struct.args):
+                        expected_type = self.structs[instr.struct.name].params[i].type
+
+                        if arg.type is not None and arg.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for argument {i} of struct '{instr.struct.name}': {arg.type} != {expected_type}"
+                            )
+                        arg.type = expected_type
+                        add_variable(arg)
+
+                elif isinstance(instr, Instruction_lcpos):
+                    expected_type = instr.primitive.type
+
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+
+                elif isinstance(instr, Instruction_lcsos):
+                    expected_type = instr.struct.as_type()
+
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
                     for i, arg in enumerate(instr.struct.args):
                         expected_type = self.structs[instr.struct.name].params[i].type
 

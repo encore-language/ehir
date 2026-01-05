@@ -2,7 +2,18 @@ from src.core.block import Block
 from src.core.derectives import Derective_fn, Derective_struct
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Instruction
-from src.core.instructions.capture import Instruction_cpoh, Instruction_cpos, Instruction_csoh, Instruction_csos
+from src.core.instructions.capture import (
+    Instruction_cpoh,
+    Instruction_cpos,
+    Instruction_csoh,
+    Instruction_csos,
+    Instruction_lcpos,
+    Instruction_lcsos,
+    Instruction_scpoh,
+    Instruction_scpos,
+    Instruction_scsoh,
+    Instruction_scsos,
+)
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
@@ -23,7 +34,7 @@ from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive, PrimitiveType
 from src.core.struct import Struct
-from src.core.type import Pointer, Type
+from src.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
 from src.core.variable import Parameter, Variable
 from src.parser import tokens as t
 from src.parser.lexer import Lexer
@@ -197,6 +208,30 @@ class Parser:
             struct = self._parse_struct_init()
             return Instruction_csoh(var_out=var, struct=struct)
 
+        elif isinstance(curr_token, t.SCPOS):
+            primitive = self._parse_primitive()
+            return Instruction_scpos(var_out=var, primitive=primitive)
+
+        elif isinstance(curr_token, t.SCPOH):
+            primitive = self._parse_primitive()
+            return Instruction_scpoh(var_out=var, primitive=primitive)
+
+        elif isinstance(curr_token, t.SCSOS):
+            struct = self._parse_struct_init()
+            return Instruction_scsos(var_out=var, struct=struct)
+
+        elif isinstance(curr_token, t.SCSOH):
+            struct = self._parse_struct_init()
+            return Instruction_scsoh(var_out=var, struct=struct)
+
+        elif isinstance(curr_token, t.LCPOS):
+            primitive = self._parse_primitive()
+            return Instruction_lcpos(var_out=var, primitive=primitive)
+
+        elif isinstance(curr_token, t.LCSOS):
+            struct = self._parse_struct_init()
+            return Instruction_lcsos(var_out=var, struct=struct)
+
         elif isinstance(curr_token, t.CALL):
             fn_name = self._safe_consume(t.IDENTIFIER).string
             args = []
@@ -301,6 +336,18 @@ class Parser:
         if isinstance(self._lookup_curr(), t.STAR):
             self._safe_consume(t.STAR)
             type = Pointer(type)
+        elif isinstance(self._lookup_curr(), t.LESS):
+            # Smart pointer
+            self._safe_consume(t.LESS)
+            pointer_t = self._safe_consume(t.IDENTIFIER).string
+            if pointer_t == "H":
+                type = HeapSmartPointer(type)
+            elif pointer_t == "S":
+                type = StackSmartPointer(type)
+            else:
+                raise ValueError(f"Invalid smart pointer type: {pointer_t}")
+            self._safe_consume(t.GREATER)
+
         return type
 
     def _parse_primitive(self) -> Primitive:

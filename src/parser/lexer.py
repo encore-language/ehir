@@ -127,6 +127,18 @@ class Lexer:
                 self._append_token(t.CSOS)
             case "csoh":
                 self._append_token(t.CSOH)
+            case "scpos":
+                self._append_token(t.SCPOS)
+            case "scpoh":
+                self._append_token(t.SCPOH)
+            case "scsos":
+                self._append_token(t.SCSOS)
+            case "scsoh":
+                self._append_token(t.SCSOH)
+            case "lcpos":
+                self._append_token(t.LCPOS)
+            case "lcsos":
+                self._append_token(t.LCSOS)
             case "pcast":
                 self._append_token(t.PCAST)
             case "getptr":

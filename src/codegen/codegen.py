@@ -25,6 +25,7 @@ from src.core.instructions.operators.arithmetic import (
     Instruction_mul,
     Instruction_sub,
 )
+from src.core.instructions.special import Instruction_comment
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
 from src.core.primitives.base import Primitive
@@ -62,11 +63,14 @@ class Codegen:
             if isinstance(derective, Derective_fn):
                 self._codegen_fn_decl(derective)
 
-        print(self.module)
         # step 3: build all function bodies
-        for derective in ast:
-            if isinstance(derective, Derective_fn):
-                self._codegen_fn_body(derective)
+        try:
+            for derective in ast:
+                if isinstance(derective, Derective_fn):
+                    self._codegen_fn_body(derective)
+        except Exception as e:
+            print(self.module)
+            raise e
 
         # step 2: Optimize the modul
         print("============ LLVM IR DEBUG ===============")
@@ -167,6 +171,8 @@ class Codegen:
             self._build_getfieldptr(instr)
         elif isinstance(instr, Instruction_getptr):
             self._build_getptr(instr)
+        elif isinstance(instr, Instruction_comment):
+            pass  # skip comment
         else:
             raise NotImplementedError(f"Unsupported instruction type: {type(instr)}")
 
@@ -364,6 +370,9 @@ class Codegen:
         self.builder.ret(value)
 
     def _build_type(self, type: Type) -> ir.Type:
+        if isinstance(type, Pointer):
+            return ir.PointerType(self._build_type(type.pointee))
+
         if isinstance(type, Usize_t):
             return ir.IntType(bits=type.size)
 

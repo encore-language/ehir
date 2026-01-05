@@ -17,4 +17,14 @@ class Pointer(Type):
         self.pointee = pointee
 
     def __str__(self) -> str:
-        return f"{super().__str__()}*"
+        return f"{self.pointee}*"
+
+
+class HeapSmartPointer(Pointer):
+    def __str__(self) -> str:
+        return f"{self.pointee}<H>"
+
+
+class StackSmartPointer(Pointer):
+    def __str__(self) -> str:
+        return f"{self.pointee}<S>"
