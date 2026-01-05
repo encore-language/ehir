@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from src.core.instructions.base import Instruction
+from .base import ControlFlow
 
 
 @dataclass
-class Instruction_br(Instruction):
+class Instruction_br(ControlFlow):
     label: str
 
     def __str__(self) -> str:
