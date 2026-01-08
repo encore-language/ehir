@@ -62,6 +62,10 @@ class Deallocator:
 
         all_paths = self._find_all_paths(fn.entry_block.name, fn.exit_block.name, cfg)
         for block, var in self._captures.items():
+            assert isinstance(fn.exit_block.term, Instruction_ret)
+            if fn.exit_block.term.var.name == var:
+                continue
+
             outer_paths = []
             inner_paths = []
             for path in all_paths:
