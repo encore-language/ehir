@@ -18,6 +18,8 @@ class Normalizer:
             if isinstance(derective, Derective_fn):
                 self._terminate_blocks(derective)
                 new.append(self._normalize_fn(derective))
+            else:
+                new.append(derective)
         return new
 
     def _terminate_blocks(self, derective: Derective_fn):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.parser.parser import Parser
-from src.simplifier import Deallocator, Normalizer, Resolver
+from src.simplifier import Deallocator, Downgrader, Normalizer, Resolver
 
 
 class Compiler:
@@ -23,11 +23,11 @@ class Compiler:
 
         deallocator = Deallocator()
         deallocator.run(ast)
-        print(*ast, sep="\n")
-
-        # downgrader = Downgrader()
-        # downgrader.run(ast)
         # print(*ast, sep="\n")
+
+        downgrader = Downgrader()
+        downgrader.run(ast)
+        print(*ast, sep="\n")
 
         # codegen = Codegen()
         # codegen.run(ast)
