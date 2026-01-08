@@ -3,12 +3,18 @@ from collections import deque
 from src.core.block import TerminatedBlock
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Assignable
-from src.core.instructions.capture import Instruction_lcpos, Instruction_scsoh
+from src.core.instructions.capture import Instruction_cpoh, Instruction_cpos, Instruction_lcpos, Instruction_scsoh
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
-from src.core.instructions.memory import Instruction_getptr, Instruction_halloc, Instruction_load, Instruction_store
+from src.core.instructions.memory import (
+    Instruction_getptr,
+    Instruction_halloc,
+    Instruction_hfree,
+    Instruction_load,
+    Instruction_store,
+)
 from src.core.instructions.special import Instruction_cfree
 from src.core.type import SmartPointer
 from src.core.variable import Variable
@@ -24,9 +30,9 @@ class Deallocator:
     def run(self, ast: list[Derective]):
         for derective in ast:
             if isinstance(derective, Normalized_fn):
-                self._run_in_function(derective)
+                self._place_cfree(derective)
 
-    def _run_in_function(self, fn: Normalized_fn):
+    def _place_cfree(self, fn: Normalized_fn):
         self._usages = {}
         self._captures = {}
         self._variables = {}
@@ -163,7 +169,9 @@ class Deallocator:
             if isinstance(instr, Assignable):
                 self._add_variable_capture(instr.var_out)
 
-            if isinstance(instr, (Instruction_br, Instruction_halloc, Instruction_lcpos)):
+            if isinstance(
+                instr, (Instruction_br, Instruction_halloc, Instruction_lcpos, Instruction_cpoh, Instruction_cpos)
+            ):
                 pass
             elif isinstance(instr, Instruction_ret):
                 self._add_variable_usage(instr.var)
@@ -179,5 +187,7 @@ class Deallocator:
             elif isinstance(instr, Instruction_scsoh):
                 for arg in instr.struct.args:
                     self._add_variable_usage(arg)
+            elif isinstance(instr, Instruction_hfree):
+                self._add_variable_usage(instr.var)
             else:
                 raise NotImplementedError(f"Variable usage not define for {instr}")

@@ -66,6 +66,8 @@ SKIPABLE = (
     Instruction_getfieldptr,
     Instruction_pcast,
     Instruction_getptr,
+    Instruction_comment,
+    Instruction_halloc,
 )
 
 
@@ -151,7 +153,11 @@ class Downgrader:
         assert instr.var.type
         fn_call = self._generate_cfree(instr.var.type)
         var_out = TypedVariable(name=".cfree_out", type=fn_call.ret_type)
-        return [Instruction_call(var_out=var_out, fn_name=fn_call.name, args=[instr.var])]
+        var_ini = TypedVariable(name=".cfree_ini", type=Usize_t())
+        return [
+            *self._downgrade_lcpos(Instruction_lcpos(var_out=var_ini, primitive=Usize(0))),
+            Instruction_call(var_out=var_out, fn_name=fn_call.name, args=[instr.var, var_ini]),
+        ]
 
     def _downgrade_cpos(self, instr: Instruction_cpos) -> list[Instruction]:
         assert instr.var_out.type is not None
@@ -462,7 +468,7 @@ class Downgrader:
                         Instruction_call(
                             var_out=TypedVariable(name=f".pass1_{field}", type=Usize_t()),
                             fn_name=f"cfree_{struct_wrapped.params[i].type.name}",
-                            args=[var_1],
+                            args=[self_param, var_1],
                         ),
                     ]
                 )
@@ -482,7 +488,7 @@ class Downgrader:
             name="pass_2",
             body=[
                 Instruction_getfieldptr(
-                    in_reachable_ptr,
+                    out_reachable_ptr,
                     self_param,
                     indexes=[TypedVariable(name="3", type=Usize_t(1))],
                 ),
@@ -498,7 +504,7 @@ class Downgrader:
         out_reachable_2 = TypedVariable(name=".pass_2_out_reachable", type=Usize_t(1))
         out_visited_2_ptr = TypedVariable(name=".pass_2_out_visited", type=Pointer(Usize_t(1)))
         out_visited_2 = TypedVariable(name=".pass_2_out_visited", type=Usize_t(1))
-        out_reachable_new_ptr = TypedVariable(name=".pass_2_out_reachable_new_ptr", type=Pointer(Usize_t(1)))
+        # out_reachable_new_ptr = TypedVariable(name=".pass_2_out_reachable_new_ptr", type=Pointer(Usize_t(1)))
         out_reachable_new = TypedVariable(name=".pass_2_out_reachable_new", type=Usize_t(1))
         ref_cnt = TypedVariable(name=".pass_2_ref_cnt", type=Usize_t())
         ref_cnt_not_zero = TypedVariable(name=".pass_2_ref_cnt_not_zero", type=Usize_t(1))
@@ -536,12 +542,8 @@ class Downgrader:
                     lhs=out_reachable_2,
                     rhs=ref_cnt_not_zero,
                 ),
-                Instruction_getptr(
-                    var_out=out_reachable_new_ptr,
-                    var=out_reachable_new,
-                ),
                 Instruction_store(
-                    var_src=out_reachable_new_ptr,
+                    var_src=out_reachable_new,
                     var_dst=out_reachable_2_ptr,
                 ),
                 Instruction_put(
@@ -572,7 +574,7 @@ class Downgrader:
                     Instruction_call(
                         var_out=TypedVariable(name=f".pass2_{field}", type=Usize_t()),
                         fn_name=f"cfree_{struct_wrapped.params[i].type.name}",
-                        args=[var_2],
+                        args=[self_param, var_2],
                     ),
                 )
 
@@ -611,7 +613,7 @@ class Downgrader:
                     Instruction_call(
                         var_out=TypedVariable(name=f".pass3_{field}", type=Usize_t()),
                         fn_name=f"cfree_{struct_wrapped.params[i].type.name}",
-                        args=[var_3],
+                        args=[self_param, var_3],
                     ),
                 )
         ref_cnt = TypedVariable(name=".pass_3_ref_cnt", type=Usize_t())

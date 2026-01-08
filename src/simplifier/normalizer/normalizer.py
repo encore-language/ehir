@@ -52,7 +52,7 @@ class Normalizer:
         if "entry" not in block_mapping:
             raise ValueError(f"Function '{derective.name}' must have an entry block")
 
-        if num_ret == 1:
+        if num_ret == 1 and ret_block_name != "entry":
             assert ret_block_name
             return Normalized_fn(
                 name=derective.name,

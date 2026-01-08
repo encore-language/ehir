@@ -25,6 +25,7 @@ from src.core.instructions.operators.arithmetic import (
     Instruction_mul,
     Instruction_sub,
 )
+from src.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
 from src.core.instructions.special import Instruction_comment
 from src.core.instructions.special.call import Instruction_call
 from src.core.primitives import Usize, Usize_t
@@ -129,7 +130,8 @@ class Codegen:
             ir_block = func.append_basic_block(block.name)
             ir_blocks.append(ir_block)
 
-        for block, ir_block in zip(fn.body, ir_blocks):
+        for block, ir_block in zip(fn.get_body(), ir_blocks, strict=True):
+            assert block.name == ir_block.name
             self.builder.position_at_end(ir_block)
             self._build_block(block)
 
@@ -153,6 +155,14 @@ class Codegen:
             self._build_add(instr)
         elif isinstance(instr, Instruction_sub):
             self._build_sub(instr)
+        elif isinstance(instr, Instruction_or):
+            self._build_or(instr)
+        elif isinstance(instr, Instruction_and):
+            self._build_and(instr)
+        elif isinstance(instr, Instruction_ieq):
+            self._build_ieq(instr)
+        elif isinstance(instr, Instruction_neq):
+            self._build_neq(instr)
         elif isinstance(instr, Instruction_mul):
             self._build_mul(instr)
         elif isinstance(instr, Instruction_div):
@@ -334,6 +344,42 @@ class Codegen:
         left = self._variables[instr.lhs.name]
         right = self._variables[instr.rhs.name]
         result = self.builder.sdiv(left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_or(self, instr: Instruction_or):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.or_(left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_and(self, instr: Instruction_and):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.and_(left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_ieq(self, instr: Instruction_ieq):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.icmp_signed("==", left, right, name=instr.var_out.name)
+        self._variables[instr.var_out.name] = result
+        return result
+
+    def _build_neq(self, instr: Instruction_neq):
+        self.builder.comment("")
+        self.builder.comment(f"{instr}")
+        left = self._variables[instr.lhs.name]
+        right = self._variables[instr.rhs.name]
+        result = self.builder.icmp_signed("!=", left, right, name=instr.var_out.name)
         self._variables[instr.var_out.name] = result
         return result
 
