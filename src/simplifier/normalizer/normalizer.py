@@ -36,14 +36,30 @@ class Normalizer:
     def _normalize_fn(self, derective: Derective_fn) -> Normalized_fn:
         # Step 0: Prepare block mapping
         block_mapping: dict[str, TerminatedBlock] = {}
+        num_ret = 0
+        ret_block_name = None
         for block in derective.body:
             if block.name in block_mapping:
                 raise ValueError(f"Double definition of block {block.name}")
             assert isinstance(block, TerminatedBlock)
             block_mapping[block.name] = block
+            if isinstance(block.term, Instruction_ret):
+                num_ret += 1
+                ret_block_name = block.name
 
         if "entry" not in block_mapping:
             raise ValueError(f"Function '{derective.name}' must have an entry block")
+
+        if num_ret == 1:
+            assert ret_block_name
+            return Normalized_fn(
+                name=derective.name,
+                params=derective.params,
+                ret_type=derective.ret_type,
+                entry_block=block_mapping["entry"],
+                body=[block for name, block in block_mapping.items() if name not in ("entry", ret_block_name)],
+                exit_block=block_mapping[ret_block_name],
+            )
 
         if "exit" in block_mapping:
             raise ValueError(f"Function '{derective.name}' has reserved block `exit`")

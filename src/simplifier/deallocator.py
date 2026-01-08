@@ -37,10 +37,7 @@ class Deallocator:
             name2block[block.name] = block
             cfg[block.name] = []
 
-        if "entry" not in name2block:
-            raise ValueError(f"Function '{fn.name}' doesn`t contain `entry` block!")
-
-        queue: deque[TerminatedBlock] = deque([name2block["entry"]])
+        queue: deque[TerminatedBlock] = deque([fn.entry_block])
         while queue:
             block = queue.popleft()
             self._collect_variable_usages(block)
@@ -63,7 +60,7 @@ class Deallocator:
                 if child not in observed:
                     queue.append(name2block[child])
 
-        all_paths = self._find_all_paths("entry", "exit", cfg)
+        all_paths = self._find_all_paths(fn.entry_block.name, fn.exit_block.name, cfg)
         for block, var in self._captures.items():
             outer_paths = []
             inner_paths = []
