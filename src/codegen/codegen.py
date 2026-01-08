@@ -124,7 +124,7 @@ class Codegen:
             param.name = param_name
 
         ir_blocks = []
-        for block in fn.body:
+        for block in fn.get_body():
             assert isinstance(block, TerminatedBlock)
             ir_block = func.append_basic_block(block.name)
             ir_blocks.append(ir_block)

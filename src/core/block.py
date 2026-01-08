@@ -10,10 +10,10 @@ class Block:
     body: list[Instruction]
 
     def __str__(self) -> str:
-        body_repr = "\n".join("\n".join(f"  {line}" for line in str(b).splitlines()) for b in self._get_instructions())
+        body_repr = "\n".join("\n".join(f"  {line}" for line in str(b).splitlines()) for b in self.get_body())
         return f"${self.name}:\n{body_repr}"
 
-    def _get_instructions(self) -> list[Instruction]:
+    def get_body(self) -> list[Instruction]:
         return self.body
 
 
@@ -21,5 +21,5 @@ class Block:
 class TerminatedBlock(Block):
     term: ControlFlow
 
-    def _get_instructions(self) -> list[Instruction]:
+    def get_body(self) -> list[Instruction]:
         return [*self.body, self.term]

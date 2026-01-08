@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from src.codegen.codegen import Codegen
 from src.parser.parser import Parser
 from src.simplifier import Deallocator, Downgrader, Normalizer, Resolver
 
@@ -29,5 +30,5 @@ class Compiler:
         downgrader.run(ast)
         print(*ast, sep="\n")
 
-        # codegen = Codegen()
-        # codegen.run(ast)
+        codegen = Codegen()
+        codegen.run(ast)

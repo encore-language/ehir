@@ -14,6 +14,7 @@ from src.core.instructions.capture import (
     Instruction_scsoh,
     Instruction_scsos,
 )
+from src.core.instructions.control_flow.base import ControlFlow
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
@@ -51,6 +52,11 @@ SKIPABLE = (
     Instruction_sub,
     Instruction_mul,
     Instruction_div,
+    Instruction_and,
+    Instruction_or,
+    Instruction_ieq,
+    Instruction_neq,
+    Instruction_store,
     Instruction_call,
     Instruction_switch,
     Instruction_salloc,
@@ -93,9 +99,18 @@ class Downgrader:
 
     def _downgrade_function(self, fn: Normalized_fn):
         for block in fn.get_body():
+            assert isinstance(block, TerminatedBlock)
             new_body = []
-            for instr in block.body:
-                new_body.extend(self._downgrade(instr))
+            for instr in block.get_body():
+                new = self._downgrade(instr)
+                if not isinstance(instr, ControlFlow):
+                    new_body.extend(new)
+                else:
+                    term = new.pop()
+                    assert isinstance(term, ControlFlow)
+                    new_body.extend(new)
+                    block.term = term
+
             block.body = new_body
 
     def _downgrade(self, instr: Instruction) -> list[Instruction]:
@@ -411,7 +426,7 @@ class Downgrader:
                 Instruction_getfieldptr(
                     in_reachable_ptr,
                     self_param,
-                    indexes=[TypedVariable(name="in_reachable", type=Usize_t(1))],
+                    indexes=[TypedVariable(name="2", type=Usize_t(1))],
                 ),
                 Instruction_load(
                     var_out=in_reachable_var,
@@ -469,7 +484,7 @@ class Downgrader:
                 Instruction_getfieldptr(
                     in_reachable_ptr,
                     self_param,
-                    indexes=[TypedVariable(name="out_reachable", type=Usize_t(1))],
+                    indexes=[TypedVariable(name="3", type=Usize_t(1))],
                 ),
                 Instruction_load(
                     var_out=out_reachable_var,
@@ -493,7 +508,7 @@ class Downgrader:
                 Instruction_getfieldptr(
                     var_out=out_reachable_2_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="out_reachable", type=Usize_t(1))],
+                    indexes=[TypedVariable(name="3", type=Usize_t(1))],
                 ),
                 Instruction_load(
                     var_out=out_reachable_2,
@@ -502,14 +517,14 @@ class Downgrader:
                 Instruction_getfieldptr(
                     var_out=out_visited_2_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="out_visited", type=Usize_t(1))],
+                    indexes=[TypedVariable(name="4", type=Usize_t(1))],
                 ),
                 Instruction_load(
                     var_out=out_visited_2,
                     var=out_visited_2_ptr,
                 ),
                 Instruction_getfield(
-                    var_out=ref_cnt, src=self_param, indexes=[TypedVariable(name="ref_cnt", type=Usize_t())]
+                    var_out=ref_cnt, src=self_param, indexes=[TypedVariable(name="1", type=Usize_t())]
                 ),
                 Instruction_neq(
                     var_out=ref_cnt_not_zero,
@@ -572,7 +587,7 @@ class Downgrader:
                 Instruction_getfieldptr(
                     var_out=deallocate_3_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="deallocate", type=Usize_t(1))],
+                    indexes=[TypedVariable(name="5", type=Usize_t(1))],
                 ),
                 Instruction_load(
                     var_out=deallocate_3,
@@ -604,7 +619,7 @@ class Downgrader:
             Instruction_getfield(
                 var_out=ref_cnt,
                 src=self_param,
-                indexes=[TypedVariable(name="ref_cnt", type=Usize_t())],
+                indexes=[TypedVariable(name="1", type=Usize_t())],
             )
         )
         ref_cnt_is_zero = TypedVariable(name=".pass_3_ref_cnt_is_zero", type=Usize_t(1))
@@ -614,7 +629,7 @@ class Downgrader:
             Instruction_getfield(
                 var_out=inner_reach,
                 src=self_param,
-                indexes=[TypedVariable(name="in_reachable", type=Usize_t(1))],
+                indexes=[TypedVariable(name="2", type=Usize_t(1))],
             )
         )
         outer_reach = TypedVariable(name=".pass_3_outer_reach", type=Usize_t(1))
@@ -622,7 +637,7 @@ class Downgrader:
             Instruction_getfield(
                 var_out=outer_reach,
                 src=self_param,
-                indexes=[TypedVariable(name="out_reachable", type=Usize_t(1))],
+                indexes=[TypedVariable(name="3", type=Usize_t(1))],
             )
         )
         inner_reach_is_one = TypedVariable(name=".pass_3_inner_reach_is_one", type=Usize_t(1))
@@ -643,7 +658,7 @@ class Downgrader:
                 Instruction_getfield(
                     var_out=wrap_struct_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="ptr", type=struct.params[0].type)],
+                    indexes=[TypedVariable(name="0", type=struct.params[0].type)],
                 ),
                 Instruction_hfree(var=wrap_struct_ptr),
             ],
@@ -704,7 +719,7 @@ class Downgrader:
             ],
             exit_block=exit_block,
         )
-        # self._downgrade_function(derective)
+        self._downgrade_function(derective)
         self._fns[name] = derective
         self._fns_to_add.append(derective)
         return derective
