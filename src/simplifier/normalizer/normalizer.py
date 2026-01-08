@@ -1,0 +1,93 @@
+from src.core.block import TerminatedBlock
+from src.core.derectives import Derective_fn
+from src.core.derectives.base import Derective
+from src.core.instructions.base import Instruction
+from src.core.instructions.control_flow import Instruction_br
+from src.core.instructions.control_flow.base import ControlFlow
+from src.core.instructions.control_flow.ret import Instruction_ret
+from src.core.instructions.memory import Instruction_getptr, Instruction_halloc, Instruction_load, Instruction_store
+from src.core.type import Pointer
+from src.core.variable import TypedVariable
+from src.simplifier.normalizer.norm_fn import Normalized_fn
+
+
+class Normalizer:
+    def run(self, ast: list[Derective]) -> list[Derective]:
+        new = []
+        for derective in ast:
+            if isinstance(derective, Derective_fn):
+                self._terminate_blocks(derective)
+                new.append(self._normalize_fn(derective))
+        return new
+
+    def _terminate_blocks(self, derective: Derective_fn):
+        new_blocks = []
+        for block in derective.body:
+            observed: list[Instruction] = []
+            for instr in block.body:
+                if isinstance(instr, ControlFlow):
+                    break
+                observed.append(instr)
+            else:
+                raise ValueError("Block must end with a control flow instruction")
+            new_blocks.append(TerminatedBlock(name=block.name, body=observed, term=instr))
+        derective.body = new_blocks
+
+    def _normalize_fn(self, derective: Derective_fn) -> Normalized_fn:
+        # Step 0: Prepare block mapping
+        block_mapping: dict[str, TerminatedBlock] = {}
+        for block in derective.body:
+            if block.name in block_mapping:
+                raise ValueError(f"Double definition of block {block.name}")
+            assert isinstance(block, TerminatedBlock)
+            block_mapping[block.name] = block
+
+        if "entry" not in block_mapping:
+            raise ValueError(f"Function '{derective.name}' must have an entry block")
+
+        if "exit" in block_mapping:
+            raise ValueError(f"Function '{derective.name}' has reserved block `exit`")
+
+        # Step 1: Create resulting variable in entry block
+        exit_var_ptr = TypedVariable(name=".exit_var_ptr", type=Pointer(derective.ret_type))
+        entry_block = block_mapping["entry"]
+        entry_block.body.append(
+            Instruction_halloc(
+                var_out=exit_var_ptr,
+                type=derective.ret_type,
+            )
+        )
+
+        # Step 2: Replace `ret` to `getptr` + `store` + `br exit`
+        for block in block_mapping.values():
+            if isinstance(block.term, Instruction_ret):
+                assert block.term.var.type is not None
+
+                getptr = Instruction_getptr(
+                    var_out=TypedVariable(
+                        name=f".{block.term.var.name}_ptr_norm_proc", type=Pointer(block.term.var.type)
+                    ),
+                    var=block.term.var,
+                )
+                store = Instruction_store(
+                    var_src=getptr.var_out,
+                    var_dst=exit_var_ptr,
+                )
+                block.body.extend([getptr, store])
+                block.term = Instruction_br(label="exit")
+
+        # Step 3: Create and add exit block
+        exit_var = TypedVariable(name=".exit_var", type=derective.ret_type)
+        exit_block = TerminatedBlock(
+            name="exit", body=[Instruction_load(var_out=exit_var, var=exit_var_ptr)], term=Instruction_ret(exit_var)
+        )
+
+        # Step 4: Return normalized block
+        return Normalized_fn(
+            name=derective.name,
+            params=derective.params,
+            ret_type=derective.ret_type,
+            entry_block=entry_block,
+            body=[block for name, block in block_mapping.items() if name != "entry"],
+            exit_block=exit_block,
+        )
