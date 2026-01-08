@@ -9,12 +9,15 @@ from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
 from src.core.instructions.memory import Instruction_getptr, Instruction_halloc, Instruction_load, Instruction_store
+from src.core.instructions.special import Instruction_comment
+from src.core.type import SmartPointer
 from src.core.variable import Variable
 from src.simplifier.normalizer.norm_fn import Normalized_fn
 
 
 class Deallocator:
     _usages: dict[str, set[str]]
+    _captures: dict[str, str]
     _curr_block: str
 
     def run(self, ast: list[Derective]):
@@ -24,12 +27,15 @@ class Deallocator:
 
     def _run_in_function(self, fn: Normalized_fn):
         self._usages = {}
+        self._captures = {}
         cfg: dict[str, list[str]] = {}
+        observed: set[str] = set()
 
         name2block: dict[str, TerminatedBlock] = {}
         for block in fn.get_body():
             assert isinstance(block, TerminatedBlock)
             name2block[block.name] = block
+            cfg[block.name] = []
 
         if "entry" not in name2block:
             raise ValueError(f"Function '{fn.name}' doesn`t contain `entry` block!")
@@ -38,6 +44,7 @@ class Deallocator:
         while queue:
             block = queue.popleft()
             self._collect_variable_usages(block)
+            observed.add(block.name)
 
             children: list[str] = []
             if isinstance(block.term, Instruction_br):
@@ -51,27 +58,110 @@ class Deallocator:
                     children.append(case[1])
 
             for child in children:
-                if child not in cfg.get(block.name, []):
-                    cfg[block.name] = cfg.get(block.name, []) + [child]
-                if child not in cfg:
+                if child not in cfg[block.name]:
+                    cfg[block.name].append(child)
+                if child not in observed:
                     queue.append(name2block[child])
 
-        print(cfg)
-        print(self._usages)
+        all_paths = self._find_all_paths("entry", "exit", cfg)
+        for block, var in self._captures.items():
+            outer_paths = []
+            inner_paths = []
+            for path in all_paths:
+                if any(usg in path for usg in self._usages[var]):
+                    inner_paths.append(path)
+                else:
+                    outer_paths.append(path)
+
+            shared_path = self._find_shared_path(inner_paths)
+            least_shared_node = shared_path[0]
+
+            if any(least_shared_node in pth for pth in outer_paths):
+                dealloc_block = TerminatedBlock(
+                    name=f".dealloc_{var}",
+                    body=[],
+                    term=Instruction_br(label=least_shared_node),
+                )
+                fn.body.append(dealloc_block)
+
+                for path in inner_paths:
+                    index = path.index(least_shared_node)
+                    prev_block = path[index - 1]
+                    block = name2block[prev_block]
+
+                    if isinstance(block.term, Instruction_br):
+                        block.term.label = dealloc_block.name
+                    elif isinstance(block.term, Instruction_cbr):
+                        if block.term.true_br_label == least_shared_node:
+                            block.term.true_br_label = dealloc_block.name
+                        elif block.term.else_br_label == least_shared_node:
+                            block.term.else_br_label = dealloc_block.name
+                    elif isinstance(block.term, Instruction_switch):
+                        if block.term.default_case == least_shared_node:
+                            block.term.default_case = dealloc_block.name
+                        else:
+                            for i in range(len(block.term.cases)):
+                                if block.term.cases[i][1] == least_shared_node:
+                                    block.term.cases[i] = (block.term.cases[i][0], dealloc_block.name)
+
+            else:
+                dealloc_block = name2block[least_shared_node]
+
+            dealloc_block.body.append(Instruction_comment(f"placeholder for cfree {var}"))
+
+    @staticmethod
+    def _find_shared_path(paths: list[list[str]]) -> list[str]:
+        available_stepbacks = min(map(len, paths))
+        n = 1
+        for _ in range(available_stepbacks):
+            if all(path[-n] == paths[0][-n] for path in paths):
+                n += 1
+
+        return paths[0][-n + 1 :]
+
+    @staticmethod
+    def _find_all_paths(start: str, finish: str, cfg: dict[str, list[str]]):
+        def dfs(current: str, path: list[str], visited: set[str], all_paths: list[list[str]]):
+            path.append(current)
+            visited.add(current)
+
+            if current == finish:
+                all_paths.append(path.copy())
+            else:
+                for neighbor in cfg.get(current, []):
+                    if neighbor not in visited:
+                        dfs(neighbor, path, visited, all_paths)
+
+            # (backtracking)
+            path.pop()
+            visited.remove(current)
+
+        all_paths = []
+        visited = set()
+        dfs(start, [], visited, all_paths)
+        return all_paths
 
     def _add_variable_usage(self, var: Variable):
-        self._usages[var.name] = self._usages.get(var.name, set()) | {self._curr_block}
+        if isinstance(var.type, SmartPointer):
+            self._usages[var.name] = self._usages.get(var.name, set()) | {self._curr_block}
+
+    def _add_variable_capture(self, var: Variable):
+        if isinstance(var.type, SmartPointer):
+            self._captures[self._curr_block] = var.name
+            self._add_variable_usage(var)
 
     def _collect_variable_usages(self, block: TerminatedBlock):
         self._curr_block = block.name
         for instr in [*block.body, block.term]:
             if isinstance(instr, Assignable):
-                self._add_variable_usage(instr.var_out)
+                self._add_variable_capture(instr.var_out)
 
             if isinstance(instr, (Instruction_br, Instruction_halloc, Instruction_lcpos)):
                 pass
             elif isinstance(instr, Instruction_ret):
                 self._add_variable_usage(instr.var)
+            elif isinstance(instr, Instruction_cbr):
+                self._add_variable_usage(instr.cond_var)
             elif isinstance(instr, Instruction_getptr):
                 self._add_variable_usage(instr.var)
             elif isinstance(instr, Instruction_store):

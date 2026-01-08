@@ -20,11 +20,15 @@ class Pointer(Type):
         return f"{self.pointee}*"
 
 
-class HeapSmartPointer(Pointer):
+class SmartPointer(Pointer):
+    pass
+
+
+class HeapSmartPointer(SmartPointer):
     def __str__(self) -> str:
         return f"{self.pointee}<H>"
 
 
-class StackSmartPointer(Pointer):
+class StackSmartPointer(SmartPointer):
     def __str__(self) -> str:
         return f"{self.pointee}<S>"
