@@ -9,7 +9,7 @@ from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
 from src.core.instructions.memory import Instruction_getptr, Instruction_halloc, Instruction_load, Instruction_store
-from src.core.instructions.special import Instruction_comment
+from src.core.instructions.special import Instruction_cfree
 from src.core.type import SmartPointer
 from src.core.variable import Variable
 from src.simplifier.normalizer.norm_fn import Normalized_fn
@@ -19,6 +19,7 @@ class Deallocator:
     _usages: dict[str, set[str]]
     _captures: dict[str, str]
     _curr_block: str
+    _variables: dict[str, Variable]
 
     def run(self, ast: list[Derective]):
         for derective in ast:
@@ -28,6 +29,7 @@ class Deallocator:
     def _run_in_function(self, fn: Normalized_fn):
         self._usages = {}
         self._captures = {}
+        self._variables = {}
         cfg: dict[str, list[str]] = {}
         observed: set[str] = set()
 
@@ -108,7 +110,7 @@ class Deallocator:
             else:
                 dealloc_block = name2block[least_shared_node]
 
-            dealloc_block.body.append(Instruction_comment(f"placeholder for cfree {var}"))
+            dealloc_block.body.append(Instruction_cfree(self._variables[var]))
 
     @staticmethod
     def _find_shared_path(paths: list[list[str]]) -> list[str]:
@@ -143,10 +145,14 @@ class Deallocator:
         return all_paths
 
     def _add_variable_usage(self, var: Variable):
+        self._variables[var.name] = var
+
         if isinstance(var.type, SmartPointer):
             self._usages[var.name] = self._usages.get(var.name, set()) | {self._curr_block}
 
     def _add_variable_capture(self, var: Variable):
+        self._variables[var.name] = var
+
         if isinstance(var.type, SmartPointer):
             self._captures[self._curr_block] = var.name
             self._add_variable_usage(var)
