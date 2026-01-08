@@ -2,19 +2,11 @@ struct MS {
     field1: u16
 }
 
-fn main(flag: u1) -> u16 {
+fn main() -> u16 {
   $entry:
     f1 = lcpos 0_u16
-    cbr flag, $res, $start
-  $start:
     a = scsoh MS(f1)
-    cbr flag, $alter, $res
-  $alter:
-    a_ptr = getptr a
-    cbr flag, $alter2, $res
-  $alter2:
-    a_ptr2 = getptr a
-    cbr flag, $alter, $res
+    br $res
   $res:
     zero = lcpos 0_u16
     ret zero
