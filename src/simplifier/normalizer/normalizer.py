@@ -5,7 +5,11 @@ from src.core.instructions.base import Instruction
 from src.core.instructions.control_flow import Instruction_br
 from src.core.instructions.control_flow.base import ControlFlow
 from src.core.instructions.control_flow.ret import Instruction_ret
-from src.core.instructions.memory import Instruction_getptr, Instruction_halloc, Instruction_load, Instruction_store
+from src.core.instructions.memory import (
+    Instruction_load,
+    Instruction_salloc,
+    Instruction_store,
+)
 from src.core.type import Pointer
 from src.core.variable import TypedVariable
 from src.simplifier.normalizer.norm_fn import Normalized_fn
@@ -70,7 +74,7 @@ class Normalizer:
         exit_var_ptr = TypedVariable(name=".exit_var_ptr", type=Pointer(derective.ret_type))
         entry_block = block_mapping["entry"]
         entry_block.body.append(
-            Instruction_halloc(
+            Instruction_salloc(
                 var_out=exit_var_ptr,
                 type=derective.ret_type,
             )
@@ -80,18 +84,11 @@ class Normalizer:
         for block in block_mapping.values():
             if isinstance(block.term, Instruction_ret):
                 assert block.term.var.type is not None
-
-                getptr = Instruction_getptr(
-                    var_out=TypedVariable(
-                        name=f".{block.term.var.name}_ptr_norm_proc", type=Pointer(block.term.var.type)
-                    ),
-                    var=block.term.var,
-                )
                 store = Instruction_store(
-                    var_src=getptr.var_out,
+                    var_src=block.term.var,
                     var_dst=exit_var_ptr,
                 )
-                block.body.extend([getptr, store])
+                block.body.append(store)
                 block.term = Instruction_br(label="exit")
 
         # Step 3: Create and add exit block

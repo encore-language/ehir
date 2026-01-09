@@ -70,6 +70,8 @@ SKIPABLE = (
     Instruction_halloc,
 )
 
+ENABLE_COMMENTS: bool = True
+
 
 class Downgrader:
     _structs: dict[str, Derective_struct]
@@ -172,9 +174,6 @@ class Downgrader:
             var=instr.var_out,
         )
         return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
             salloc,
             put,
         ]
@@ -192,9 +191,6 @@ class Downgrader:
             var=instr.var_out,
         )
         return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
             halloc,
             put,
         ]
@@ -221,11 +217,7 @@ class Downgrader:
             downgrades.append(field_ptr)
             downgrades.append(store)
 
-        return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
-        ] + downgrades
+        return downgrades
 
     def _downgrade_csoh(self, instr: Instruction_csoh) -> list[Instruction]:
         assert instr.var_out.type is not None
@@ -249,11 +241,7 @@ class Downgrader:
             downgrades.append(field_ptr)
             downgrades.append(store)
 
-        return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
-        ] + downgrades
+        return downgrades
 
     def _downgrade_scpos(self, instr: Instruction_scpos) -> list[Instruction]:
         raise NotImplementedError
@@ -301,9 +289,6 @@ class Downgrader:
         res = Instruction_lcsos(instr.var_out, s)
 
         return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
             *self._downgrade_csoh(ptr_init),
             *self._downgrade_lcpos(ref_cnt_init),
             *self._downgrade_lcpos(in_reachable_init),
@@ -322,9 +307,6 @@ class Downgrader:
         )
         load = Instruction_load(var_out=instr.var_out, var=out_ptr)
         return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
             *self._downgrade_cpos(cpos),
             load,
         ]
@@ -335,9 +317,6 @@ class Downgrader:
         csos = Instruction_csos(var_out=out_ptr, struct=instr.struct)
         load = Instruction_load(var_out=instr.var_out, var=out_ptr)
         return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
             *self._downgrade_csos(csos),
             load,
         ]
@@ -348,9 +327,6 @@ class Downgrader:
         getfieldptr = Instruction_getfieldptr(var_out=out_ptr, src=instr.src, indexes=instr.indexes)
         load = Instruction_load(var_out=instr.var_out, var=out_ptr)
         return [
-            Instruction_comment(""),
-            Instruction_comment(f"{instr}"),
-            Instruction_comment(""),
             getfieldptr,
             load,
         ]
@@ -502,7 +478,7 @@ class Downgrader:
 
         out_reachable_2_ptr = TypedVariable(name=".pass_2_out_reachable_ptr", type=Pointer(Usize_t(1)))
         out_reachable_2 = TypedVariable(name=".pass_2_out_reachable", type=Usize_t(1))
-        out_visited_2_ptr = TypedVariable(name=".pass_2_out_visited", type=Pointer(Usize_t(1)))
+        out_visited_2_ptr = TypedVariable(name=".pass_2_out_visited_ptr", type=Pointer(Usize_t(1)))
         out_visited_2 = TypedVariable(name=".pass_2_out_visited", type=Usize_t(1))
         # out_reachable_new_ptr = TypedVariable(name=".pass_2_out_reachable_new_ptr", type=Pointer(Usize_t(1)))
         out_reachable_new = TypedVariable(name=".pass_2_out_reachable_new", type=Usize_t(1))
@@ -625,7 +601,16 @@ class Downgrader:
             )
         )
         ref_cnt_is_zero = TypedVariable(name=".pass_3_ref_cnt_is_zero", type=Usize_t(1))
-        pass_3v1_block.body.append(Instruction_ieq(var_out=ref_cnt_is_zero, lhs=ref_cnt, rhs=var_0))
+        zero_1_bit = TypedVariable(".pass_3_zero_1_bit", type=Usize_t(1))
+        one_1_bit = TypedVariable(".pass_3_one_1_bit", type=Usize_t(1))
+        pass_3v1_block.body.extend(
+            [
+                Instruction_pcast(var_out=zero_1_bit, var=var_0, type=Usize_t(1)),
+                Instruction_pcast(var_out=one_1_bit, var=var_1, type=Usize_t(1)),
+                Instruction_ieq(var_out=ref_cnt_is_zero, lhs=ref_cnt, rhs=var_0),
+            ]
+        )
+
         inner_reach = TypedVariable(name=".pass_3_inner_reach", type=Usize_t(1))
         pass_3v1_block.body.append(
             Instruction_getfield(
@@ -643,10 +628,10 @@ class Downgrader:
             )
         )
         inner_reach_is_one = TypedVariable(name=".pass_3_inner_reach_is_one", type=Usize_t(1))
-        pass_3v1_block.body.append(Instruction_ieq(var_out=inner_reach_is_one, lhs=inner_reach, rhs=var_1))
+        pass_3v1_block.body.append(Instruction_ieq(var_out=inner_reach_is_one, lhs=inner_reach, rhs=one_1_bit))
 
         outer_reach_is_zero = TypedVariable(name=".pass_3_outer_reach_is_zero", type=Usize_t(1))
-        pass_3v1_block.body.append(Instruction_ieq(var_out=outer_reach_is_zero, lhs=outer_reach, rhs=var_0))
+        pass_3v1_block.body.append(Instruction_ieq(var_out=outer_reach_is_zero, lhs=outer_reach, rhs=zero_1_bit))
 
         cond1 = TypedVariable(name=".pass_3_cond1", type=Usize_t(1))
         pass_3v1_block.body.append(Instruction_and(var_out=cond1, lhs=ref_cnt_is_zero, rhs=inner_reach_is_one))

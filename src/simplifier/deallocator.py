@@ -3,22 +3,61 @@ from collections import deque
 from src.core.block import TerminatedBlock
 from src.core.derectives.base import Derective
 from src.core.instructions.base import Assignable
-from src.core.instructions.capture import Instruction_cpoh, Instruction_cpos, Instruction_lcpos, Instruction_scsoh
+from src.core.instructions.capture import (
+    Instruction_cpoh,
+    Instruction_cpos,
+    Instruction_csoh,
+    Instruction_csos,
+    Instruction_lcpos,
+    Instruction_scsoh,
+)
 from src.core.instructions.control_flow.br import Instruction_br
 from src.core.instructions.control_flow.cbr import Instruction_cbr
 from src.core.instructions.control_flow.ret import Instruction_ret
 from src.core.instructions.control_flow.switch import Instruction_switch
 from src.core.instructions.memory import (
+    Instruction_getfield,
+    Instruction_getfieldptr,
     Instruction_getptr,
     Instruction_halloc,
     Instruction_hfree,
     Instruction_load,
+    Instruction_pcast,
+    Instruction_salloc,
     Instruction_store,
 )
-from src.core.instructions.special import Instruction_cfree
+from src.core.instructions.operators.arithmetic import (
+    Instruction_add,
+    Instruction_div,
+    Instruction_mul,
+    Instruction_sub,
+)
+from src.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
+from src.core.instructions.special import Instruction_call, Instruction_cfree
 from src.core.type import SmartPointer
 from src.core.variable import Variable
 from src.simplifier.normalizer.norm_fn import Normalized_fn
+
+SKIPABLE = (
+    Instruction_br,
+    Instruction_halloc,
+    Instruction_lcpos,
+    Instruction_cpoh,
+    Instruction_cpos,
+    Instruction_salloc,
+    Instruction_getfield,
+    Instruction_getfieldptr,
+)
+BINOPS = (
+    Instruction_add,
+    Instruction_sub,
+    Instruction_mul,
+    Instruction_div,
+    Instruction_or,
+    Instruction_and,
+    Instruction_ieq,
+    Instruction_neq,
+)
 
 
 class Deallocator:
@@ -169,9 +208,7 @@ class Deallocator:
             if isinstance(instr, Assignable):
                 self._add_variable_capture(instr.var_out)
 
-            if isinstance(
-                instr, (Instruction_br, Instruction_halloc, Instruction_lcpos, Instruction_cpoh, Instruction_cpos)
-            ):
+            if isinstance(instr, SKIPABLE):
                 pass
             elif isinstance(instr, Instruction_ret):
                 self._add_variable_usage(instr.var)
@@ -184,10 +221,18 @@ class Deallocator:
                 self._add_variable_usage(instr.var_dst)
             elif isinstance(instr, Instruction_load):
                 self._add_variable_usage(instr.var)
-            elif isinstance(instr, Instruction_scsoh):
+            elif isinstance(instr, (Instruction_scsoh, Instruction_csos, Instruction_csoh)):
                 for arg in instr.struct.args:
                     self._add_variable_usage(arg)
             elif isinstance(instr, Instruction_hfree):
                 self._add_variable_usage(instr.var)
+            elif isinstance(instr, Instruction_pcast):
+                self._add_variable_usage(instr.var)
+            elif isinstance(instr, Instruction_call):
+                for arg in instr.args:
+                    self._add_variable_usage(arg)
+            elif isinstance(instr, BINOPS):
+                self._add_variable_usage(instr.lhs)
+                self._add_variable_usage(instr.rhs)
             else:
                 raise NotImplementedError(f"Variable usage not define for {instr}")

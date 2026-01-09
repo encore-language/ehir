@@ -295,7 +295,10 @@ class Codegen:
 
         ptr = self._variables[instr.var.name]
         free_func = self._get_free_function()
-        self.builder.call(free_func, [ptr])
+        dst_type = free_func.args[0].type
+        ptr_conv = self.builder.bitcast(typ=dst_type, val=ptr)
+
+        self.builder.call(free_func, [ptr_conv])
 
     def _build_put(self, instr: Instruction_put):
         self.builder.comment("")
