@@ -9,3 +9,6 @@ class ProcessedModule:
     name: str
     structs: list[Derective_struct]
     funcs: list[Normalized_fn]
+
+    def __str__(self) -> str:
+        return "\n".join(map(str, self.structs)) + "\n" * 2 + "\n".join(map(str, self.funcs))
