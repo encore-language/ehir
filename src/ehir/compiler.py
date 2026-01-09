@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from ehir.parser.parser import Parser
 from ehir.postprocessor import Postprocessor, ProcessedModule
 from ehir.simplifier import Deallocator, Downgrader, Normalizer, Resolver
@@ -14,10 +12,7 @@ class Compiler:
         self._downgrader = Downgrader()
         self._postprocessor = Postprocessor()
 
-    def compile(self, program_path: Path) -> ProcessedModule:
-        with program_path.open("r") as f:
-            source_code = f.read()
-
+    def compile(self, source_code: str, name: str) -> ProcessedModule:
         ast = self._parser.parse(source_code)
         # print(*ast, sep="\n")
 
@@ -33,6 +28,6 @@ class Compiler:
         self._downgrader.run(ast)
         # print(*ast, sep="\n")
 
-        mod = self._postprocessor.run(ast, program_path.stem)
+        mod = self._postprocessor.run(ast, name)
         # print(mod)
         return mod
