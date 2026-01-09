@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 
 from ehir.core.type import Type
-from ehir.core.variable import Parameter
+from ehir.core.variable import Variable
 
 
 @dataclass
 class Struct:
     name: str
-    args: list[Parameter]
+    args: list[Variable]
 
     def as_type(self) -> Type:
         return Type(self.name)

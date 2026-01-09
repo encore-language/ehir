@@ -9,6 +9,7 @@ from ehir.core.instructions.capture import (
     Instruction_csoh,
     Instruction_csos,
     Instruction_lcpos,
+    Instruction_lcsos,
     Instruction_scsoh,
 )
 from ehir.core.instructions.control_flow.br import Instruction_br
@@ -221,7 +222,7 @@ class Deallocator:
                 self._add_variable_usage(instr.var_dst)
             elif isinstance(instr, Instruction_load):
                 self._add_variable_usage(instr.var)
-            elif isinstance(instr, (Instruction_scsoh, Instruction_csos, Instruction_csoh)):
+            elif isinstance(instr, (Instruction_scsoh, Instruction_csos, Instruction_csoh, Instruction_lcsos)):
                 for arg in instr.struct.args:
                     self._add_variable_usage(arg)
             elif isinstance(instr, Instruction_hfree):
