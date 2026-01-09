@@ -23,7 +23,7 @@ wheels = [
 [[package]]
 name = "ehir"
 version = "0.0.1"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "llvmlite" },
     { name = "rich" },

@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from src.compiler import Compiler
+from ehir.compiler import Compiler
 
 
 def main():
