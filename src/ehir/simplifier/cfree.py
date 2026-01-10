@@ -89,13 +89,13 @@ class Cfree_Simplifier_Pass:
             vars: list[Variable] = [instr.src, *instr.indexes]
             new_indexes = []
             for var in vars:
+                new_indexes.append(var)
+
                 assert var.type is not None
                 if var.type.name in [x.name for x in self._structs_to_add]:
                     struct = self._structs[var.type.name]
                     wrapped_struct = struct.params[0]
                     new_indexes.append(TypedVariable(wrapped_struct.name, wrapped_struct.type))
-                else:
-                    new_indexes.append(var)
 
             instr.src = new_indexes.pop(0)
             instr.indexes = new_indexes
