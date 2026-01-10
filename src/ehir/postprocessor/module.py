@@ -11,4 +11,4 @@ class ProcessedModule:
     funcs: list[Normalized_fn]
 
     def __str__(self) -> str:
-        return "\n".join(map(str, self.structs)) + "\n" * 2 + "\n".join(map(str, self.funcs))
+        return "\n\n".join(map(str, [*self.structs, *self.funcs]))

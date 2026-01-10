@@ -1,6 +1,7 @@
 from ehir.parser.parser import Parser
 from ehir.postprocessor import Postprocessor, ProcessedModule
 from ehir.simplifier import Deallocator, Downgrader, Normalizer, Resolver
+from ehir.simplifier.cfree import Cfree_Simplifier_Pass
 
 
 class Compiler:
@@ -9,6 +10,7 @@ class Compiler:
         self._resolver = Resolver()
         self._normalizer = Normalizer()
         self._deallocator = Deallocator()
+        self._cfree_pass = Cfree_Simplifier_Pass()
         self._downgrader = Downgrader()
         self._postprocessor = Postprocessor()
 
@@ -25,9 +27,12 @@ class Compiler:
         self._deallocator.run(ast)
         # print(*ast, sep="\n")
 
+        ast = self._cfree_pass.run(ast)
+        # print(*ast, sep="\n")
+
         self._downgrader.run(ast)
         # print(*ast, sep="\n")
 
         mod = self._postprocessor.run(ast, name)
-        # print(mod)
+        print(mod)
         return mod

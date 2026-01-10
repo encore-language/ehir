@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
@@ -20,15 +21,23 @@ class Pointer(Type):
         return f"{self.pointee}*"
 
 
-class SmartPointer(Pointer):
-    pass
+class SmartPointer(Pointer, ABC):
+    @abstractmethod
+    def get_name(self) -> str:
+        raise NotImplementedError
 
 
 class HeapSmartPointer(SmartPointer):
+    def get_name(self) -> str:
+        return f"{self.pointee}_HSP"
+
     def __str__(self) -> str:
         return f"{self.pointee}<H>"
 
 
 class StackSmartPointer(SmartPointer):
+    def get_name(self) -> str:
+        return f"{self.pointee}_SSP"
+
     def __str__(self) -> str:
         return f"{self.pointee}<S>"
