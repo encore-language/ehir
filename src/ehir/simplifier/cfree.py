@@ -87,10 +87,12 @@ class Cfree_Simplifier_Pass:
 
         if isinstance(instr, (Instruction_getfield, Instruction_getfieldptr)):
             assert instr.var_out.type
-            if isinstance(instr.src.type, SmartPointer):
-                ptr_unwrap = TypedVariable(f".{instr.var_out.name}_unwrap_struct", Pointer(instr.var_out.type))
-                getfieldptr = Instruction_getfieldptr(
-                    var_out=ptr_unwrap, src=instr.src, field=TypedVariable("0", Pointer(instr.var_out.type))
+            assert instr.src.type
+            if instr.src.type.name in [x.name for x in self._structs_to_add]:
+                smart_struct = self._structs[instr.src.type.name]
+                ptr_unwrap = TypedVariable(f".{instr.var_out.name}_unwrap_struct", smart_struct.params[0].type)
+                getfieldptr = Instruction_getfield(
+                    var_out=ptr_unwrap, src=instr.src, field=TypedVariable("0", smart_struct.params[0].type)
                 )
                 instr.src = ptr_unwrap
                 return [getfieldptr, instr]
