@@ -161,6 +161,10 @@ class Lexer:
                 self._append_token(t.ADD)
             case "sub":
                 self._append_token(t.SUB)
+            case "mul":
+                self._append_token(t.MUL)
+            case "div":
+                self._append_token(t.DIV)
             case "salloc":
                 self._append_token(t.SALLOC)
             case "put":

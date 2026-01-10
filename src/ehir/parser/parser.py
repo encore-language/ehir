@@ -29,7 +29,12 @@ from ehir.core.instructions.memory import (
 from ehir.core.instructions.memory.halloc import Instruction_halloc
 from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
-from ehir.core.instructions.operators.arithmetic import Instruction_add, Instruction_sub
+from ehir.core.instructions.operators.arithmetic import (
+    Instruction_add,
+    Instruction_div,
+    Instruction_mul,
+    Instruction_sub,
+)
 from ehir.core.instructions.special.call import Instruction_call
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.primitives.base import Primitive, PrimitiveType
@@ -255,6 +260,18 @@ class Parser:
             self._safe_consume(t.COMMA)
             rhs = self._parse_variable()
             return Instruction_sub(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.MUL):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_mul(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.DIV):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_div(var_out=var, lhs=lhs, rhs=rhs)
 
         elif isinstance(curr_token, t.SALLOC):
             type = self._parse_type()
