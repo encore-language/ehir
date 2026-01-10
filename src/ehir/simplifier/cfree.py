@@ -175,17 +175,7 @@ class Cfree_Simplifier_Pass:
 
         pass_1_block = TerminatedBlock(
             name="pass_1",
-            body=[
-                Instruction_getfieldptr(
-                    in_reachable_ptr,
-                    self_param,
-                    field=TypedVariable(name="2", type=Usize_t(1)),
-                ),
-                Instruction_load(
-                    var_out=in_reachable_var,
-                    var=in_reachable_ptr,
-                ),
-            ],
+            body=[],
             term=Instruction_cbr(cond_var=in_reachable_var, true_br_label=exit_block.name, else_br_label="pass_1v1"),
         )
         pass_1v1_block = TerminatedBlock(
@@ -436,6 +426,15 @@ class Cfree_Simplifier_Pass:
                 ),
                 Instruction_call(
                     var_out=TypedVariable(name=".pass_3", type=Usize_t()), fn_name=name, args=[self_param, var_3]
+                ),
+                Instruction_getfieldptr(
+                    in_reachable_ptr,
+                    self_param,
+                    field=TypedVariable(name="2", type=Usize_t(1)),
+                ),
+                Instruction_load(
+                    var_out=in_reachable_var,
+                    var=in_reachable_ptr,
                 ),
             ],
             term=Instruction_br(label=exit_block.name),
