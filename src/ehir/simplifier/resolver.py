@@ -23,6 +23,8 @@ from ehir.core.instructions.memory import (
     Instruction_hfree,
     Instruction_pcast,
     Instruction_put,
+    Instruction_sgetfield,
+    Instruction_sgetfieldptr,
 )
 from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
@@ -149,7 +151,10 @@ class Resolver:
                         arg.type = expected_type
                         add_variable(arg)
 
-                elif isinstance(instr, (Instruction_getfield, Instruction_getfieldptr)):
+                elif isinstance(
+                    instr,
+                    (Instruction_getfield, Instruction_getfieldptr, Instruction_sgetfield, Instruction_sgetfieldptr),
+                ):
                     instr.src = add_variable(instr.src)
                     assert instr.src.type
 
@@ -172,7 +177,9 @@ class Resolver:
                         raise TypeError(f"Unknown field '{instr.field.name}' in struct '{instr.src.type.name}'")
 
                     expected_type = (
-                        instr.field.type if isinstance(instr, Instruction_getfield) else Pointer(instr.field.type)
+                        instr.field.type
+                        if isinstance(instr, (Instruction_getfield, Instruction_sgetfield))
+                        else Pointer(instr.field.type)
                     )
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(

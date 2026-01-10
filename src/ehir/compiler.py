@@ -34,5 +34,5 @@ class Compiler:
         # print(*ast, sep="\n")
 
         mod = self._postprocessor.run(ast, name)
-        # print(mod)
+        print(mod)
         return mod

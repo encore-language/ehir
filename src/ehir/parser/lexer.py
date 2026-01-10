@@ -147,6 +147,10 @@ class Lexer:
                 self._append_token(t.GETFIELD)
             case "getfieldptr":
                 self._append_token(t.GETFIELDPTR)
+            case "sgetfield":
+                self._append_token(t.SGETFIELD)
+            case "sgetfieldptr":
+                self._append_token(t.SGETFIELDPTR)
             case "call":
                 self._append_token(t.CALL)
             case "br":

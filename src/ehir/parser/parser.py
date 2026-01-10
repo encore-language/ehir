@@ -25,6 +25,8 @@ from ehir.core.instructions.memory import (
     Instruction_hfree,
     Instruction_pcast,
     Instruction_put,
+    Instruction_sgetfield,
+    Instruction_sgetfieldptr,
 )
 from ehir.core.instructions.memory.halloc import Instruction_halloc
 from ehir.core.instructions.memory.load import Instruction_load
@@ -307,6 +309,18 @@ class Parser:
             self._safe_consume(t.COMMA)
             field = self._parse_variable()
             return Instruction_getfieldptr(var_out=var, src=var_src, field=field)
+
+        elif isinstance(curr_token, t.SGETFIELD):
+            var_src = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            field = self._parse_variable()
+            return Instruction_sgetfield(var_out=var, src=var_src, field=field)
+
+        elif isinstance(curr_token, t.SGETFIELDPTR):
+            var_src = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            field = self._parse_variable()
+            return Instruction_sgetfieldptr(var_out=var, src=var_src, field=field)
 
         else:
             raise ValueError(f"Unexpected token {curr_token}")

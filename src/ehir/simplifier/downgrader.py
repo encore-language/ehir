@@ -26,6 +26,8 @@ from ehir.core.instructions.memory import (
     Instruction_hfree,
     Instruction_pcast,
     Instruction_put,
+    Instruction_sgetfield,
+    Instruction_sgetfieldptr,
     Instruction_store,
 )
 from ehir.core.instructions.memory.halloc import Instruction_halloc
@@ -140,6 +142,10 @@ class Downgrader:
             return self._downgrade_lcsos(instr)
         elif isinstance(instr, Instruction_getfield):
             return self._downgrade_getfield(instr)
+        elif isinstance(instr, Instruction_sgetfield):
+            return self._downgrade_sgetfield(instr)
+        elif isinstance(instr, Instruction_sgetfieldptr):
+            return self._downgrade_sgetfieldptr(instr)
         elif isinstance(instr, Instruction_cbr):
             return self._downgrade_cbr(instr)
         elif isinstance(instr, Instruction_br):
@@ -303,6 +309,29 @@ class Downgrader:
             getfieldptr,
             load,
         ]
+
+    def _downgrade_sgetfield(self, instr: Instruction_sgetfield) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert instr.src.type
+        wrapped_struct = self._structs[instr.src.type.name]
+        wrapped_struct_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=wrapped_struct.params[0].type)
+        getfield1 = Instruction_getfield(
+            var_out=wrapped_struct_ptr, src=instr.src, field=TypedVariable("0", wrapped_struct.params[0].type)
+        )
+        getfield2 = Instruction_getfield(var_out=instr.var_out, src=wrapped_struct_ptr, field=instr.field)
+        return [
+            *self._downgrade_getfield(getfield1),
+            *self._downgrade_getfield(getfield2),
+        ]
+
+    def _downgrade_sgetfieldptr(self, instr: Instruction_sgetfieldptr) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        wrapped_struct_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
+        getfield = Instruction_getfield(
+            var_out=wrapped_struct_ptr, src=instr.src, field=TypedVariable("0", instr.var_out.type)
+        )
+        getfieldptr = Instruction_getfieldptr(var_out=instr.var_out, src=wrapped_struct_ptr, field=instr.field)
+        return [*self._downgrade_getfield(getfield), getfieldptr]
 
     def _downgrade_cbr(self, instr: Instruction_cbr) -> list[Instruction]:
         assert instr.cond_var.type is not None

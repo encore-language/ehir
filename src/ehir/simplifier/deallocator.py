@@ -25,6 +25,8 @@ from ehir.core.instructions.memory import (
     Instruction_load,
     Instruction_pcast,
     Instruction_salloc,
+    Instruction_sgetfield,
+    Instruction_sgetfieldptr,
     Instruction_store,
 )
 from ehir.core.instructions.operators.arithmetic import (
@@ -48,6 +50,8 @@ SKIPABLE = (
     Instruction_salloc,
     Instruction_getfield,
     Instruction_getfieldptr,
+    Instruction_sgetfield,
+    Instruction_sgetfieldptr,
 )
 BINOPS = (
     Instruction_add,
