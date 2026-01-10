@@ -151,36 +151,29 @@ class Resolver:
 
                 elif isinstance(instr, (Instruction_getfield, Instruction_getfieldptr)):
                     instr.src = add_variable(instr.src)
+                    assert instr.src.type
 
-                    # step 0: resolve full chain
-                    assert len(instr.indexes) > 0
-                    curr = instr.src
-                    for next in instr.indexes:
-                        assert curr.type is not None
-                        if isinstance(curr.type, PrimitiveType):
-                            raise TypeError(f"Cannot access field of primitive type '{curr.type}'")
+                    if isinstance(instr.src.type, PrimitiveType):
+                        raise TypeError(f"Cannot access field of primitive type '{instr.src.type}'")
 
-                        if (corresponding_struct := self.structs.get(curr.type.name, None)) is None:
-                            raise TypeError(f"Unknown struct '{curr.type.name}'")
+                    if (corresponding_struct := self.structs.get(instr.src.type.name, None)) is None:
+                        raise TypeError(f"Unknown struct '{instr.src.type.name}'")
 
-                        assert isinstance(next, Variable)
-                        next_name = next.name
-                        for i, param in enumerate(corresponding_struct.params):
-                            if param.name == next_name:
-                                if next.type and next.type != param.type:
-                                    raise TypeError(
-                                        f"Type mismatch for field '{next_name}' in struct '{curr.type.name}': {next.type} != {param.type}"
-                                    )
-                                next.type = param.type
-                                next.name = str(i)
-                                break
-                        else:
-                            raise TypeError(f"Unknown field '{next_name}' in struct '{curr.type.name}'")
-                        curr = next
+                    for i, param in enumerate(corresponding_struct.params):
+                        if param.name == instr.field.name:
+                            if instr.field.type and instr.field.type != param.type:
+                                raise TypeError(
+                                    f"Type mismatch for field '{instr.field.name}' in struct '{instr.src.type.name}': {instr.field.type} != {param.type}"
+                                )
+                            instr.field.type = param.type
+                            instr.field.name = str(i)
+                            break
+                    else:
+                        raise TypeError(f"Unknown field '{instr.field.name}' in struct '{instr.src.type.name}'")
 
-                    assert curr.type is not None
-                    expected_type = curr.type if isinstance(instr, Instruction_getfield) else Pointer(curr.type)
-
+                    expected_type = (
+                        instr.field.type if isinstance(instr, Instruction_getfield) else Pointer(instr.field.type)
+                    )
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(
                             f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"

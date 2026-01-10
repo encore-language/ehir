@@ -298,23 +298,18 @@ class Parser:
 
         elif isinstance(curr_token, t.GETFIELD):
             var_src = self._parse_variable()
-            indexes = self._parse_index_list()
-            return Instruction_getfield(var_out=var, src=var_src, indexes=indexes)
+            self._safe_consume(t.COMMA)
+            field = self._parse_variable()
+            return Instruction_getfield(var_out=var, src=var_src, field=field)
 
         elif isinstance(curr_token, t.GETFIELDPTR):
             var_src = self._parse_variable()
-            indexes = self._parse_index_list()
-            return Instruction_getfieldptr(var_out=var, src=var_src, indexes=indexes)
+            self._safe_consume(t.COMMA)
+            field = self._parse_variable()
+            return Instruction_getfieldptr(var_out=var, src=var_src, field=field)
 
         else:
             raise ValueError(f"Unexpected token {curr_token}")
-
-    def _parse_index_list(self) -> list[Variable]:
-        indexes = []
-        while isinstance(self._lookup_curr(), t.GREATER):
-            self._safe_consume(t.GREATER)
-            indexes.append(self._parse_variable())
-        return indexes
 
     def _parse_struct_init(self) -> Struct:
         name = self._safe_consume(t.IDENTIFIER).string

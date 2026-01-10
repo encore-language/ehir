@@ -196,7 +196,7 @@ class Downgrader:
             assert arg.type
             field_arg = TypedVariable(name=f".{instr.var_out.name}.{arg.name}", type=Pointer(arg.type))
             field_ptr = Instruction_getfieldptr(
-                var_out=field_arg, src=instr.var_out, indexes=[TypedVariable(name=str(i), type=arg.type)]
+                var_out=field_arg, src=instr.var_out, field=TypedVariable(name=str(i), type=arg.type)
             )
 
             store = Instruction_store(
@@ -221,7 +221,7 @@ class Downgrader:
             assert arg.type
             field_arg = TypedVariable(name=f".{instr.var_out.name}.{arg.name}", type=Pointer(arg.type))
             field_ptr = Instruction_getfieldptr(
-                var_out=field_arg, src=instr.var_out, indexes=[TypedVariable(name=str(i), type=arg.type)]
+                var_out=field_arg, src=instr.var_out, field=TypedVariable(name=str(i), type=arg.type)
             )
 
             store = Instruction_store(
@@ -297,7 +297,7 @@ class Downgrader:
     def _downgrade_getfield(self, instr: Instruction_getfield) -> list[Instruction]:
         assert instr.var_out.type is not None
         out_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
-        getfieldptr = Instruction_getfieldptr(var_out=out_ptr, src=instr.src, indexes=instr.indexes)
+        getfieldptr = Instruction_getfieldptr(var_out=out_ptr, src=instr.src, field=instr.field)
         load = Instruction_load(var_out=instr.var_out, var=out_ptr)
         return [
             getfieldptr,
@@ -329,5 +329,3 @@ class Downgrader:
             cases=[],
         )
         return [*self._downgrade_cpos(cpos), load, switch]
-
-    # def _generate_cfree(self, typ: SmartPointer) -> Normalized_fn: ...

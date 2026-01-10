@@ -86,19 +86,14 @@ class Cfree_Simplifier_Pass:
                 self._unwrap_smart_pointer(instr.var_out)
 
         if isinstance(instr, (Instruction_getfield, Instruction_getfieldptr)):
-            vars: list[Variable] = [instr.src, *instr.indexes]
-            new_indexes = []
-            for var in vars:
-                new_indexes.append(var)
-
-                assert var.type is not None
-                if var.type.name in [x.name for x in self._structs_to_add]:
-                    struct = self._structs[var.type.name]
-                    wrapped_struct = struct.params[0]
-                    new_indexes.append(TypedVariable("0", wrapped_struct.type))
-
-            instr.src = new_indexes.pop(0)
-            instr.indexes = new_indexes
+            assert instr.var_out.type
+            if isinstance(instr.src.type, SmartPointer):
+                ptr_unwrap = TypedVariable(f".{instr.var_out.name}_unwrap_struct", Pointer(instr.var_out.type))
+                getfieldptr = Instruction_getfieldptr(
+                    var_out=ptr_unwrap, src=instr.src, field=TypedVariable("0", Pointer(instr.var_out.type))
+                )
+                instr.src = ptr_unwrap
+                return [getfieldptr, instr]
 
         elif isinstance(instr, Instruction_cfree):
             assert instr.var.type
@@ -194,7 +189,7 @@ class Cfree_Simplifier_Pass:
                 Instruction_getfieldptr(
                     in_reachable_ptr,
                     self_param,
-                    indexes=[TypedVariable(name="2", type=Usize_t(1))],
+                    field=TypedVariable(name="2", type=Usize_t(1)),
                 ),
                 Instruction_load(
                     var_out=in_reachable_var,
@@ -250,9 +245,9 @@ class Cfree_Simplifier_Pass:
             name="pass_2",
             body=[
                 Instruction_getfieldptr(
-                    out_reachable_ptr,
-                    self_param,
-                    indexes=[TypedVariable(name="3", type=Usize_t(1))],
+                    var_out=out_reachable_ptr,
+                    src=self_param,
+                    field=TypedVariable(name="3", type=Usize_t(1)),
                 ),
                 Instruction_load(
                     var_out=out_reachable_var,
@@ -276,7 +271,7 @@ class Cfree_Simplifier_Pass:
                 Instruction_getfieldptr(
                     var_out=out_reachable_2_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="3", type=Usize_t(1))],
+                    field=TypedVariable(name="3", type=Usize_t(1)),
                 ),
                 Instruction_load(
                     var_out=out_reachable_2,
@@ -285,14 +280,16 @@ class Cfree_Simplifier_Pass:
                 Instruction_getfieldptr(
                     var_out=out_visited_2_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="4", type=Usize_t(1))],
+                    field=TypedVariable(name="4", type=Usize_t(1)),
                 ),
                 Instruction_load(
                     var_out=out_visited_2,
                     var=out_visited_2_ptr,
                 ),
                 Instruction_getfield(
-                    var_out=ref_cnt, src=self_param, indexes=[TypedVariable(name="1", type=Usize_t())]
+                    var_out=ref_cnt,
+                    src=self_param,
+                    field=TypedVariable(name="1", type=Usize_t()),
                 ),
                 Instruction_neq(
                     var_out=ref_cnt_not_zero,
@@ -351,7 +348,7 @@ class Cfree_Simplifier_Pass:
                 Instruction_getfieldptr(
                     var_out=deallocate_3_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="5", type=Usize_t(1))],
+                    field=TypedVariable(name="5", type=Usize_t(1)),
                 ),
                 Instruction_load(
                     var_out=deallocate_3,
@@ -383,7 +380,7 @@ class Cfree_Simplifier_Pass:
             Instruction_getfield(
                 var_out=ref_cnt,
                 src=self_param,
-                indexes=[TypedVariable(name="1", type=Usize_t())],
+                field=TypedVariable(name="1", type=Usize_t()),
             )
         )
         ref_cnt_is_zero = TypedVariable(name=".pass_3_ref_cnt_is_zero", type=Usize_t(1))
@@ -402,7 +399,7 @@ class Cfree_Simplifier_Pass:
             Instruction_getfield(
                 var_out=inner_reach,
                 src=self_param,
-                indexes=[TypedVariable(name="2", type=Usize_t(1))],
+                field=TypedVariable(name="2", type=Usize_t(1)),
             )
         )
         outer_reach = TypedVariable(name=".pass_3_outer_reach", type=Usize_t(1))
@@ -410,7 +407,7 @@ class Cfree_Simplifier_Pass:
             Instruction_getfield(
                 var_out=outer_reach,
                 src=self_param,
-                indexes=[TypedVariable(name="3", type=Usize_t(1))],
+                field=TypedVariable(name="3", type=Usize_t(1)),
             )
         )
         inner_reach_is_one = TypedVariable(name=".pass_3_inner_reach_is_one", type=Usize_t(1))
@@ -431,7 +428,7 @@ class Cfree_Simplifier_Pass:
                 Instruction_getfield(
                     var_out=wrap_struct_ptr,
                     src=self_param,
-                    indexes=[TypedVariable(name="0", type=struct.params[0].type)],
+                    field=TypedVariable(name="0", type=struct.params[0].type),
                 ),
                 Instruction_hfree(var=wrap_struct_ptr),
             ],

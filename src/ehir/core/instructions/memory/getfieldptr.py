@@ -7,8 +7,7 @@ from ehir.core.variable import Variable
 @dataclass
 class Instruction_getfieldptr(Assignable):
     src: Variable
-    indexes: list[Variable]
+    field: Variable
 
     def __str__(self) -> str:
-        body = [self.src, *self.indexes]
-        return f"{super().__str__()}getfieldptr {' > '.join(map(str, body))}"
+        return f"{super().__str__()}getfieldptr {self.src}, {self.field}"
