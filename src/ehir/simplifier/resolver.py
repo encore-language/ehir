@@ -196,9 +196,19 @@ class Resolver:
                     instr.var = add_variable(instr.var)
 
                 elif isinstance(instr, (Instruction_add, Instruction_sub, Instruction_mul, Instruction_div)):
-                    instr.var_out = add_variable(instr.var_out)
                     instr.lhs = add_variable(instr.lhs)
                     instr.rhs = add_variable(instr.rhs)
+
+                    lhs_t = instr.lhs.type
+                    rhs_t = instr.rhs.type
+                    if lhs_t and rhs_t:
+                        if lhs_t == rhs_t:
+                            expected_t = lhs_t
+                            if instr.var_out.type and instr.var_out.type != expected_t:
+                                raise TypeError(f"Type mismatch for binop: {instr.var_out.type} != {expected_t}")
+                            instr.var_out.type = expected_t
+
+                    instr.var_out = add_variable(instr.var_out)
 
                 elif isinstance(instr, Instruction_call):
                     target_fn = self.fn[instr.fn_name]
