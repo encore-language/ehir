@@ -427,15 +427,6 @@ class Cfree_Simplifier_Pass:
                 Instruction_call(
                     var_out=TypedVariable(name=".pass_3", type=Usize_t()), fn_name=name, args=[self_param, var_3]
                 ),
-                Instruction_getfieldptr(
-                    in_reachable_ptr,
-                    self_param,
-                    field=TypedVariable(name="2", type=Usize_t(1)),
-                ),
-                Instruction_load(
-                    var_out=in_reachable_var,
-                    var=in_reachable_ptr,
-                ),
             ],
             term=Instruction_br(label=exit_block.name),
         )
@@ -446,6 +437,15 @@ class Cfree_Simplifier_Pass:
                 Instruction_lcpos(var_out=var_1, primitive=Usize(1)),
                 Instruction_lcpos(var_out=var_2, primitive=Usize(2)),
                 Instruction_lcpos(var_out=var_3, primitive=Usize(3)),
+                Instruction_getfieldptr(
+                    in_reachable_ptr,
+                    self_param,
+                    field=TypedVariable(name="2", type=Usize_t(1)),
+                ),
+                Instruction_load(
+                    var_out=in_reachable_var,
+                    var=in_reachable_ptr,
+                ),
             ],
             term=Instruction_switch(
                 cond_var=mode_param,
