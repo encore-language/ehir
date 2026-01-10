@@ -32,8 +32,6 @@ class Cfree_Simplifier_Pass:
     _structs: dict[str, Derective_struct]
     _structs_to_add: list[Derective_struct]
 
-    def __init__(self): ...
-
     def run(self, ast: list[Derective]):
         self._fns = {}
         self._fns_to_add = []
@@ -98,6 +96,8 @@ class Cfree_Simplifier_Pass:
                     new_indexes.append(TypedVariable(wrapped_struct.name, wrapped_struct.type))
                 else:
                     new_indexes.append(var)
+
+            instr.src = new_indexes.pop(0)
             instr.indexes = new_indexes
 
         elif isinstance(instr, Instruction_cfree):
