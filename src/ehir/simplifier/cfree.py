@@ -95,7 +95,7 @@ class Cfree_Simplifier_Pass:
                 if var.type.name in [x.name for x in self._structs_to_add]:
                     struct = self._structs[var.type.name]
                     wrapped_struct = struct.params[0]
-                    new_indexes.append(TypedVariable(wrapped_struct.name, wrapped_struct.type))
+                    new_indexes.append(TypedVariable("0", wrapped_struct.type))
 
             instr.src = new_indexes.pop(0)
             instr.indexes = new_indexes
