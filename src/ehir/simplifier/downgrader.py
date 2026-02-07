@@ -33,14 +33,9 @@ from ehir.core.instructions.memory import (
 from ehir.core.instructions.memory.halloc import Instruction_halloc
 from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
-from ehir.core.instructions.operators.arithmetic import (
-    Instruction_add,
-    Instruction_div,
-    Instruction_mul,
-    Instruction_sub,
-)
+from ehir.core.instructions.operators.base import BinOp
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
-from ehir.core.instructions.special import Instruction_comment
+from ehir.core.instructions.special import Instruction_comment, Instruction_phi
 from ehir.core.instructions.special.call import Instruction_call
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.struct import Struct
@@ -50,10 +45,7 @@ from ehir.simplifier.normalizer.norm_fn import Normalized_fn
 
 SKIPABLE = (
     Instruction_ret,
-    Instruction_add,
-    Instruction_sub,
-    Instruction_mul,
-    Instruction_div,
+    BinOp,
     Instruction_and,
     Instruction_or,
     Instruction_ieq,
@@ -70,6 +62,7 @@ SKIPABLE = (
     Instruction_getptr,
     Instruction_comment,
     Instruction_halloc,
+    Instruction_phi,
 )
 
 ENABLE_COMMENTS: bool = True

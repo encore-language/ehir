@@ -169,6 +169,20 @@ class Lexer:
                 self._append_token(t.MUL)
             case "div":
                 self._append_token(t.DIV)
+            case "les":
+                self._append_token(t.LES)
+            case "leq":
+                self._append_token(t.LEQ)
+            case "grt":
+                self._append_token(t.GRT)
+            case "geq":
+                self._append_token(t.GEQ)
+            case "ieq":
+                self._append_token(t.IEQ)
+            case "neq":
+                self._append_token(t.NEQ)
+            case "phi":
+                self._append_token(t.PHI)
             case "salloc":
                 self._append_token(t.SALLOC)
             case "put":

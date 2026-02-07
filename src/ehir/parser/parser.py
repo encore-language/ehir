@@ -37,7 +37,16 @@ from ehir.core.instructions.operators.arithmetic import (
     Instruction_mul,
     Instruction_sub,
 )
+from ehir.core.instructions.operators.comparison import (
+    Instruction_geq,
+    Instruction_grt,
+    Instruction_leq,
+    Instruction_les,
+)
+from ehir.core.instructions.operators.logic import Instruction_ieq, Instruction_neq
+from ehir.core.instructions.special import Instruction_phi
 from ehir.core.instructions.special.call import Instruction_call
+from ehir.core.instructions.special.phi import PhiPair
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.primitives.base import Primitive, PrimitiveType
 from ehir.core.struct import Struct
@@ -275,6 +284,45 @@ class Parser:
             rhs = self._parse_variable()
             return Instruction_div(var_out=var, lhs=lhs, rhs=rhs)
 
+        elif isinstance(curr_token, t.LES):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_les(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.LEQ):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_leq(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.GRT):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_grt(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.GEQ):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_geq(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.IEQ):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_ieq(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.NEQ):
+            lhs = self._parse_variable()
+            self._safe_consume(t.COMMA)
+            rhs = self._parse_variable()
+            return Instruction_neq(var_out=var, lhs=lhs, rhs=rhs)
+
+        elif isinstance(curr_token, t.PHI):
+            return self._parse_phi(var)
+
         elif isinstance(curr_token, t.SALLOC):
             type = self._parse_type()
             return Instruction_salloc(var_out=var, type=type)
@@ -324,6 +372,22 @@ class Parser:
 
         else:
             raise ValueError(f"Unexpected token {curr_token}")
+
+    def _parse_phi(self, var: Variable) -> Instruction_phi:
+        args: list[PhiPair] = []
+
+        def parse_phi_arg() -> PhiPair:
+            var_src = self._parse_variable()
+            label = self._parse_block_label()
+            return PhiPair(var_src, label)
+
+        args.append(parse_phi_arg())
+
+        while isinstance(self._lookup_curr(), t.COMMA):
+            self._safe_consume(t.COMMA)
+            args.append(parse_phi_arg())
+
+        return Instruction_phi(var_out=var, args=args)
 
     def _parse_struct_init(self) -> Struct:
         name = self._safe_consume(t.IDENTIFIER).string

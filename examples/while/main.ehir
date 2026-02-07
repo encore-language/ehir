@@ -1,0 +1,20 @@
+fn main() -> u16 {
+
+$entry:
+  a = lcpos 1_u16
+  br $loop_cond
+
+$loop_cond:
+  a_phi = phi a $entry, a_body $loop_body
+  five = lcpos 5_u16
+  cond = les a_phi, five
+  cbr cond, $loop_body, $loop_exit
+
+$loop_body:
+  one = lcpos 1_u16
+  a_body = add a_phi, one
+  br $loop_cond
+
+ $loop_exit:
+   ret a
+}

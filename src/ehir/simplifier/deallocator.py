@@ -29,14 +29,8 @@ from ehir.core.instructions.memory import (
     Instruction_sgetfieldptr,
     Instruction_store,
 )
-from ehir.core.instructions.operators.arithmetic import (
-    Instruction_add,
-    Instruction_div,
-    Instruction_mul,
-    Instruction_sub,
-)
-from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
-from ehir.core.instructions.special import Instruction_call, Instruction_cfree
+from ehir.core.instructions.operators.base import BinOp
+from ehir.core.instructions.special import Instruction_call, Instruction_cfree, Instruction_phi
 from ehir.core.type import SmartPointer
 from ehir.core.variable import Variable
 from ehir.simplifier.normalizer.norm_fn import Normalized_fn
@@ -52,16 +46,6 @@ SKIPABLE = (
     Instruction_getfieldptr,
     Instruction_sgetfield,
     Instruction_sgetfieldptr,
-)
-BINOPS = (
-    Instruction_add,
-    Instruction_sub,
-    Instruction_mul,
-    Instruction_div,
-    Instruction_or,
-    Instruction_and,
-    Instruction_ieq,
-    Instruction_neq,
 )
 
 
@@ -236,8 +220,11 @@ class Deallocator:
             elif isinstance(instr, Instruction_call):
                 for arg in instr.args:
                     self._add_variable_usage(arg)
-            elif isinstance(instr, BINOPS):
+            elif isinstance(instr, BinOp):
                 self._add_variable_usage(instr.lhs)
                 self._add_variable_usage(instr.rhs)
+            elif isinstance(instr, Instruction_phi):
+                for arg in instr.args:
+                    self._add_variable_usage(arg.var)
             else:
                 raise NotImplementedError(f"Variable usage not define for {instr}")

@@ -28,16 +28,12 @@ from ehir.core.instructions.memory import (
 )
 from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
-from ehir.core.instructions.operators.arithmetic import (
-    Instruction_add,
-    Instruction_div,
-    Instruction_mul,
-    Instruction_sub,
-)
+from ehir.core.instructions.operators.base import BinOp
+from ehir.core.instructions.special import Instruction_phi
 from ehir.core.instructions.special.call import Instruction_call
 from ehir.core.primitives.base import PrimitiveType
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer
-from ehir.core.variable import Variable
+from ehir.core.variable import TypedVariable, Variable
 
 
 class Resolver:
@@ -195,7 +191,7 @@ class Resolver:
                     instr.var.type = expected_type
                     instr.var = add_variable(instr.var)
 
-                elif isinstance(instr, (Instruction_add, Instruction_sub, Instruction_mul, Instruction_div)):
+                elif isinstance(instr, BinOp):
                     instr.lhs = add_variable(instr.lhs)
                     instr.rhs = add_variable(instr.rhs)
 
@@ -207,6 +203,16 @@ class Resolver:
                             if instr.var_out.type and instr.var_out.type != expected_t:
                                 raise TypeError(f"Type mismatch for binop: {instr.var_out.type} != {expected_t}")
                             instr.var_out.type = expected_t
+
+                    elif lhs_t is not None or rhs_t is not None:
+                        expected_t = lhs_t if lhs_t is not None else rhs_t
+                        assert expected_t is not None
+                        if instr.var_out.type and instr.var_out.type != expected_t:
+                            raise TypeError(f"Type mismatch for binop: {instr.var_out.type} != {expected_t}")
+
+                        instr.lhs = add_variable(TypedVariable(instr.lhs.name, expected_t))
+                        instr.rhs = add_variable(TypedVariable(instr.rhs.name, expected_t))
+                        instr.var_out.type = expected_t
 
                     instr.var_out = add_variable(instr.var_out)
 
@@ -221,6 +227,11 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
 
                     instr.args = [add_variable(arg) for arg in instr.args]
+                elif isinstance(instr, Instruction_phi):
+                    instr.var_out = add_variable(instr.var_out)
+                    for arg in instr.args:
+                        arg.var = add_variable(arg.var)
+
                 elif isinstance(instr, Instruction_br):
                     pass
                 elif isinstance(instr, Instruction_cbr):
