@@ -25,7 +25,7 @@ class Compiler:
         # print(*ast, sep="\n")
 
         self._deallocator.run(ast)
-        print(*ast, sep="\n")
+        # print(*ast, sep="\n")
 
         ast = self._cfree_pass.run(ast)
         # print(*ast, sep="\n")
