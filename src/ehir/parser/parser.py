@@ -16,6 +16,7 @@ from ehir.core.instructions.capture import (
 )
 from ehir.core.instructions.control_flow.br import Instruction_br
 from ehir.core.instructions.control_flow.cbr import Instruction_cbr
+from ehir.core.instructions.control_flow.phi import Instruction_phi, PhiPair
 from ehir.core.instructions.control_flow.ret import Instruction_ret
 from ehir.core.instructions.control_flow.switch import Instruction_switch
 from ehir.core.instructions.memory import (
@@ -44,9 +45,7 @@ from ehir.core.instructions.operators.comparison import (
     Instruction_les,
 )
 from ehir.core.instructions.operators.logic import Instruction_ieq, Instruction_neq
-from ehir.core.instructions.special import Instruction_phi
 from ehir.core.instructions.special.call import Instruction_call
-from ehir.core.instructions.special.phi import PhiPair
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.primitives.base import Primitive, PrimitiveType
 from ehir.core.struct import Struct

@@ -12,6 +12,7 @@ from ehir.core.instructions.capture import (
     Instruction_scsos,
 )
 from ehir.core.instructions.capture.cpos import Instruction_cpos
+from ehir.core.instructions.control_flow import Instruction_phi
 from ehir.core.instructions.control_flow.br import Instruction_br
 from ehir.core.instructions.control_flow.cbr import Instruction_cbr
 from ehir.core.instructions.control_flow.ret import Instruction_ret
@@ -29,11 +30,31 @@ from ehir.core.instructions.memory import (
 from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
 from ehir.core.instructions.operators.base import BinOp
-from ehir.core.instructions.special import Instruction_phi
+from ehir.core.instructions.operators.comparison import (
+    Instruction_geq,
+    Instruction_grt,
+    Instruction_leq,
+    Instruction_les,
+)
+from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
 from ehir.core.instructions.special.call import Instruction_call
+from ehir.core.primitives import Usize_t
 from ehir.core.primitives.base import PrimitiveType
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer
 from ehir.core.variable import TypedVariable, Variable
+
+_BOOLEAN_INSTRUCTS = (
+    # Comparison
+    Instruction_les,
+    Instruction_grt,
+    Instruction_leq,
+    Instruction_geq,
+    # Logic
+    Instruction_and,
+    Instruction_or,
+    Instruction_ieq,  # todo:
+    Instruction_neq,  # why it is logic?
+)
 
 
 class Resolver:
@@ -207,11 +228,15 @@ class Resolver:
                     elif lhs_t is not None or rhs_t is not None:
                         expected_t = lhs_t if lhs_t is not None else rhs_t
                         assert expected_t is not None
-                        if instr.var_out.type and instr.var_out.type != expected_t:
-                            raise TypeError(f"Type mismatch for binop: {instr.var_out.type} != {expected_t}")
 
                         instr.lhs = add_variable(TypedVariable(instr.lhs.name, expected_t))
                         instr.rhs = add_variable(TypedVariable(instr.rhs.name, expected_t))
+
+                        if isinstance(instr, _BOOLEAN_INSTRUCTS):
+                            expected_t = Usize_t(size=1)  # aka bool
+
+                        if instr.var_out.type and instr.var_out.type != expected_t:
+                            raise TypeError(f"Type mismatch for binop: {instr.var_out.type} != {expected_t}")
                         instr.var_out.type = expected_t
 
                     instr.var_out = add_variable(instr.var_out)

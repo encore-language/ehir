@@ -14,6 +14,7 @@ from ehir.core.instructions.capture import (
     Instruction_scsoh,
     Instruction_scsos,
 )
+from ehir.core.instructions.control_flow import Instruction_phi
 from ehir.core.instructions.control_flow.base import ControlFlow
 from ehir.core.instructions.control_flow.br import Instruction_br
 from ehir.core.instructions.control_flow.cbr import Instruction_cbr
@@ -35,7 +36,7 @@ from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
 from ehir.core.instructions.operators.base import BinOp
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
-from ehir.core.instructions.special import Instruction_comment, Instruction_phi
+from ehir.core.instructions.special import Instruction_comment
 from ehir.core.instructions.special.call import Instruction_call
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.struct import Struct

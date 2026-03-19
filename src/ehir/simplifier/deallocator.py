@@ -12,10 +12,13 @@ from ehir.core.instructions.capture import (
     Instruction_lcsos,
     Instruction_scsoh,
 )
-from ehir.core.instructions.control_flow.br import Instruction_br
-from ehir.core.instructions.control_flow.cbr import Instruction_cbr
-from ehir.core.instructions.control_flow.ret import Instruction_ret
-from ehir.core.instructions.control_flow.switch import Instruction_switch
+from ehir.core.instructions.control_flow import (
+    Instruction_br,
+    Instruction_cbr,
+    Instruction_phi,
+    Instruction_ret,
+    Instruction_switch,
+)
 from ehir.core.instructions.memory import (
     Instruction_getfield,
     Instruction_getfieldptr,
@@ -30,7 +33,7 @@ from ehir.core.instructions.memory import (
     Instruction_store,
 )
 from ehir.core.instructions.operators.base import BinOp
-from ehir.core.instructions.special import Instruction_call, Instruction_cfree, Instruction_phi
+from ehir.core.instructions.special import Instruction_call, Instruction_cfree
 from ehir.core.type import SmartPointer
 from ehir.core.variable import Variable
 from ehir.simplifier.normalizer.norm_fn import Normalized_fn
