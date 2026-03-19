@@ -220,7 +220,7 @@ class Resolver:
                     rhs_t = instr.rhs.type
                     if lhs_t and rhs_t:
                         if lhs_t == rhs_t:
-                            expected_t = lhs_t
+                            expected_t = Usize_t(size=1) if isinstance(instr, _BOOLEAN_INSTRUCTS) else lhs_t
                             if instr.var_out.type and instr.var_out.type != expected_t:
                                 raise TypeError(f"Type mismatch for binop: {instr.var_out.type} != {expected_t}")
                             instr.var_out.type = expected_t
@@ -253,8 +253,29 @@ class Resolver:
 
                     instr.args = [add_variable(arg) for arg in instr.args]
                 elif isinstance(instr, Instruction_phi):
+                    if _t := instr.var_out.type:
+                        expected_type = _t
+                    else:
+                        for arg in instr.args:
+                            if _t := arg.var.type:
+                                expected_type = _t
+                                break
+                        else:
+                            raise TypeError(f"Unable to determine expected type for phi instruction: {instr}")
+
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
+
                     for arg in instr.args:
+                        if arg.var.type and arg.var.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for arg '{arg.var.name}': {arg.var.type} != {expected_type}"
+                            )
+                        arg.var.type = expected_type
                         arg.var = add_variable(arg.var)
 
                 elif isinstance(instr, Instruction_br):
