@@ -18,6 +18,10 @@ class Derective_fn(Derective):
     def get_body(self) -> list[Block]:
         return self.body
 
+    def get_conrete_name(self, types: list[Type]) -> str:
+        types_repr = "_".join(str(x) for x in types)
+        return f"{self.name}_{types_repr}"
+
     def __str__(self) -> str:
         params_repr = ", ".join(str(p) for p in self.params)
         body_repr = "\n".join("\n".join(f"  {line}" for line in str(b).splitlines()) for b in self.get_body())

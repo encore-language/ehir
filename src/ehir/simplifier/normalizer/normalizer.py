@@ -58,7 +58,7 @@ class Normalizer:
 
         if num_ret == 1 and ret_block_name != "entry":
             assert ret_block_name
-            return Normalized_fn(
+            return Normalized_fn.new(
                 name=derective.name,
                 params=derective.params,
                 ret_type=derective.ret_type,
@@ -98,7 +98,7 @@ class Normalizer:
         )
 
         # Step 4: Return normalized block
-        return Normalized_fn(
+        return Normalized_fn.new(
             name=derective.name,
             params=derective.params,
             ret_type=derective.ret_type,

@@ -1,5 +1,8 @@
+from copy import deepcopy
+
 from ehir.core.derectives import Derective_fn, Derective_struct
 from ehir.core.derectives.base import Derective
+from ehir.core.instructions.base import Assignable
 from ehir.core.instructions.capture import (
     Instruction_cpoh,
     Instruction_csoh,
@@ -42,7 +45,7 @@ from ehir.core.instructions.operators.comparison import (
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
 from ehir.core.primitives import Usize_t
 from ehir.core.primitives.base import PrimitiveType
-from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer
+from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
 from ehir.core.variable import TypedVariable, Variable
 
 _BOOLEAN_INSTRUCTS = (
@@ -63,7 +66,7 @@ class Resolver:
     fn: dict[str, Derective_fn]
     structs: dict[str, Derective_struct]
 
-    def run(self, ast: list[Derective]):
+    def run(self, ast: list[Derective]) -> list[Derective]:
         self.fn = {}
         self.structs = {}
 
@@ -73,8 +76,23 @@ class Resolver:
             elif isinstance(derective, Derective_struct):
                 self.structs[derective.name] = derective
 
-        for fn in self.fn.values():
+        base_fns = list(self.fn.values())
+        for fn in base_fns:
             self._resolve(fn)
+
+        # drop generics
+        new_functions = [f for f in self.fn if f not in {x.name for x in base_fns}]
+        new_ast = []
+
+        for derective in new_functions:
+            new_ast.append(self.fn[derective])
+
+        for derective in ast[::-1]:
+            if isinstance(derective, Derective_fn) and derective.generics:
+                continue
+            new_ast.append(derective)
+
+        return new_ast
 
     def _resolve(self, fn: Derective_fn):
         variables: dict[str, Variable] = {}
@@ -244,7 +262,15 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
 
                 elif isinstance(instr, Instruction_call):
+                    instr.args = [add_variable(arg) for arg in instr.args]
                     target_fn = self.fn[instr.fn_name]
+                    if target_fn.generics:
+                        concrete_name = target_fn.get_conrete_name(instr.generics)
+                        if concrete_name not in self.fn:
+                            target_fn = self._concrete_fn(target_fn, instr.generics)
+                        instr.generics.clear()
+                        instr.fn_name = concrete_name
+                        target_fn = self.fn[concrete_name]
                     expected_type = target_fn.ret_type
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(
@@ -253,7 +279,6 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
-                    instr.args = [add_variable(arg) for arg in instr.args]
                 elif isinstance(instr, Instruction_phi):
                     if _t := instr.var_out.type:
                         expected_type = _t
@@ -345,3 +370,30 @@ class Resolver:
         for name, val in variables.items():
             if val.type is None:
                 raise TypeError(f"Type not specified for variable '{name}'")
+
+    def _concrete_fn(self, fn: Derective_fn, types: list[Type]) -> "Derective_fn":
+        assert len(fn.generics) == len(types)
+        generic_mapping = {a.name: b for a, b in zip(fn.generics, types)}
+
+        base = deepcopy(fn)
+        base.generics.clear()
+        base.name = base.get_conrete_name(types)
+        for arg in base.params:
+            if arg.type.name not in generic_mapping:
+                continue
+            arg.type = generic_mapping[arg.type.name]
+
+        for block in base.body:
+            for instr in block.get_body():
+                if not isinstance(instr, Assignable):
+                    continue
+                if instr.var_out.type and instr.var_out.type.name in generic_mapping:
+                    instr.var_out.type = generic_mapping[instr.var_out.type.name]
+
+        if base.ret_type.name in generic_mapping:
+            base.ret_type = generic_mapping[base.ret_type.name]
+
+        self.fn[base.name] = base
+        self._resolve(base)
+
+        return base

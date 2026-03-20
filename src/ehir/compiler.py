@@ -18,8 +18,8 @@ class Compiler:
         ast = self._parser.parse(source_code)
         # print(*ast, sep="\n")
 
-        self._resolver.run(ast)
-        # print(*ast, sep="\n")
+        ast = self._resolver.run(ast)
+        print(*ast, sep="\n")
 
         ast = self._normalizer.run(ast)
         # print(*ast, sep="\n")
