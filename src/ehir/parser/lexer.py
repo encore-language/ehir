@@ -84,7 +84,11 @@ class Lexer:
                     self._append_token(t.COMMA)
 
                 case ":":
-                    self._append_token(t.COLON)
+                    if self._lookup_curr() == ":":
+                        self._consume()
+                        self._append_token(t.DOUBLE_COLON)
+                    else:
+                        self._append_token(t.COLON)
 
                 case ";":
                     self._append_token(t.SEMICOLON)
@@ -119,6 +123,14 @@ class Lexer:
                 self._append_token(t.FN)
             case "struct":
                 self._append_token(t.STRUCT)
+            case "enum":
+                self._append_token(t.ENUM)
+            case "ceoh":
+                self._append_token(t.CEOH)
+            case "ceos":
+                self._append_token(t.CEOS)
+            case "lceos":
+                self._append_token(t.LCEOS)
             case "cpos":
                 self._append_token(t.CPOS)
             case "cpoh":
@@ -189,6 +201,8 @@ class Lexer:
                 self._append_token(t.PUT)
             case "load":
                 self._append_token(t.LOAD)
+            case "store":
+                self._append_token(t.STORE)
             case "halloc":
                 self._append_token(t.HALLOC)
             case "hfree":

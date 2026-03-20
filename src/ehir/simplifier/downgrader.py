@@ -1,12 +1,16 @@
 from ehir.core.block import TerminatedBlock
-from ehir.core.derectives import Derective_struct
+from ehir.core.derectives import Derective_enum, Derective_struct
 from ehir.core.derectives.base import Derective
+from ehir.core.enum import Enum
 from ehir.core.instructions.base import Instruction
 from ehir.core.instructions.capture import (
+    Instruction_ceoh,
+    Instruction_ceos,
     Instruction_cpoh,
     Instruction_cpos,
     Instruction_csoh,
     Instruction_csos,
+    Instruction_lceos,
     Instruction_lcpos,
     Instruction_lcsos,
     Instruction_scpoh,
@@ -43,7 +47,7 @@ from ehir.core.instructions.special import Instruction_comment
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.struct import Struct
 from ehir.core.type import HeapSmartPointer, Pointer
-from ehir.core.variable import TypedVariable
+from ehir.core.variable import Parameter, TypedVariable
 from ehir.simplifier.normalizer.norm_fn import Normalized_fn
 
 SKIPABLE = (
@@ -83,21 +87,26 @@ class Downgrader:
         self._fns = {}
         self._fns_to_add = []
 
+        rewritten_ast: list[Derective] = []
         for derective in ast:
-            if isinstance(derective, Derective_struct):
-                self._structs[derective.name] = derective
+            if isinstance(derective, Derective_enum):
+                lowered = self._lower_enum_derective(derective)
+                self._structs[lowered.name] = lowered
+                rewritten_ast.append(lowered)
+            else:
+                if isinstance(derective, Derective_struct):
+                    self._structs[derective.name] = derective
+                rewritten_ast.append(derective)
 
-        for derective in ast:
+        for derective in rewritten_ast:
             if isinstance(derective, Normalized_fn):
                 self._fns[derective.name] = derective
 
-        for derective in ast:
+        for derective in rewritten_ast:
             if isinstance(derective, Normalized_fn):
                 self._downgrade_function(derective)
 
-        # Add new structs
-        ast.extend(self._structs_to_add)
-        ast.extend(self._fns_to_add)
+        ast[:] = rewritten_ast + self._structs_to_add + self._fns_to_add
 
     def _downgrade_function(self, fn: Normalized_fn):
         for block in fn.get_body():
@@ -120,6 +129,10 @@ class Downgrader:
             return self._downgrade_cpos(instr)
         elif isinstance(instr, Instruction_cpoh):
             return self._downgrade_cpoh(instr)
+        elif isinstance(instr, Instruction_ceos):
+            return self._downgrade_ceos(instr)
+        elif isinstance(instr, Instruction_ceoh):
+            return self._downgrade_ceoh(instr)
         elif isinstance(instr, Instruction_csos):
             return self._downgrade_csos(instr)
         elif isinstance(instr, Instruction_csoh):
@@ -134,6 +147,8 @@ class Downgrader:
             return self._downgrade_scsoh(instr)
         elif isinstance(instr, Instruction_lcpos):
             return self._downgrade_lcpos(instr)
+        elif isinstance(instr, Instruction_lceos):
+            return self._downgrade_lceos(instr)
         elif isinstance(instr, Instruction_lcsos):
             return self._downgrade_lcsos(instr)
         elif isinstance(instr, Instruction_getfield):
@@ -150,6 +165,13 @@ class Downgrader:
             return [instr]
         else:
             raise NotImplementedError(f"Downgrading instruction for {type(instr)}:{instr} not implemented")
+
+    def _lower_enum_derective(self, enum: Derective_enum) -> Derective_struct:
+        params = [Parameter(name="tag", type=Usize_t(8))]
+        for variant in enum.variants:
+            assert variant.type is not None
+            params.append(Parameter(name=variant.name, type=Pointer(variant.type)))
+        return Derective_struct(name=enum.name, generics=enum.generics, params=params)
 
     def _downgrade_cpos(self, instr: Instruction_cpos) -> list[Instruction]:
         assert instr.var_out.type is not None
@@ -184,6 +206,16 @@ class Downgrader:
             halloc,
             put,
         ]
+
+    def _downgrade_ceoh(self, instr: Instruction_ceoh) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+        return self._downgrade_enum_capture(instr.var_out, instr.enum, on_heap=True)
+
+    def _downgrade_ceos(self, instr: Instruction_ceos) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+        return self._downgrade_enum_capture(instr.var_out, instr.enum, on_heap=False)
 
     def _downgrade_csos(self, instr: Instruction_csos) -> list[Instruction]:
         assert instr.var_out.type is not None
@@ -286,6 +318,16 @@ class Downgrader:
             load,
         ]
 
+    def _downgrade_lceos(self, instr: Instruction_lceos) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        out_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
+        ceos = Instruction_ceos(var_out=out_ptr, enum=instr.enum)
+        load = Instruction_load(var_out=instr.var_out, var=out_ptr)
+        return [
+            *self._downgrade_ceos(ceos),
+            load,
+        ]
+
     def _downgrade_lcsos(self, instr: Instruction_lcsos) -> list[Instruction]:
         assert instr.var_out.type is not None
         out_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
@@ -305,6 +347,52 @@ class Downgrader:
             getfieldptr,
             load,
         ]
+
+    def _downgrade_enum_capture(self, out: TypedVariable, enum: Enum, on_heap: bool) -> list[Instruction]:
+        assert out.type is not None
+        assert isinstance(out.type, Pointer)
+
+        lowered_struct = self._structs[enum.name]
+        tag_value = next(i for i, param in enumerate(lowered_struct.params[1:]) if param.name == enum.variant)
+        tag_var = TypedVariable(name=f".{out.name}_tag", type=Usize_t(8))
+        tag_init = Instruction_lcpos(var_out=tag_var, primitive=Usize(tag_value, size=8))
+
+        alloc: Instruction
+        if on_heap:
+            alloc = Instruction_halloc(var_out=out, type=out.type.pointee)
+        else:
+            alloc = Instruction_salloc(var_out=out, type=out.type.pointee)
+
+        tag_ptr = TypedVariable(name=f".{out.name}_tag_ptr", type=Pointer(Usize_t(8)))
+        tag_field_ptr = Instruction_getfieldptr(
+            var_out=tag_ptr, src=out, field=TypedVariable(name="0", type=Usize_t(8))
+        )
+        tag_store = Instruction_store(var_src=tag_var, var_dst=tag_ptr)
+
+        result: list[Instruction] = [alloc, *self._downgrade_lcpos(tag_init), tag_field_ptr, tag_store]
+
+        if enum.payload is None:
+            return result
+
+        payload_type = enum.payload.as_type()
+        payload_ptr = TypedVariable(name=f".{out.name}_{enum.variant}_payload", type=Pointer(payload_type))
+        if on_heap:
+            payload_init = Instruction_csoh(var_out=payload_ptr, struct=enum.payload)
+            result.extend(self._downgrade_csoh(payload_init))
+        else:
+            payload_init = Instruction_csos(var_out=payload_ptr, struct=enum.payload)
+            result.extend(self._downgrade_csos(payload_init))
+
+        payload_field_index = next(i for i, param in enumerate(lowered_struct.params) if param.name == enum.variant)
+        payload_field_ptr = TypedVariable(name=f".{out.name}_{enum.variant}_field_ptr", type=Pointer(payload_ptr.type))
+        payload_getfieldptr = Instruction_getfieldptr(
+            var_out=payload_field_ptr,
+            src=out,
+            field=TypedVariable(name=str(payload_field_index), type=payload_ptr.type),
+        )
+        payload_store = Instruction_store(var_src=payload_ptr, var_dst=payload_field_ptr)
+        result.extend([payload_getfieldptr, payload_store])
+        return result
 
     def _downgrade_sgetfield(self, instr: Instruction_sgetfield) -> list[Instruction]:
         assert instr.var_out.type is not None

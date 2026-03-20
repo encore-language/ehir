@@ -4,10 +4,13 @@ from ehir.core.block import TerminatedBlock
 from ehir.core.derectives.base import Derective
 from ehir.core.instructions.base import Assignable
 from ehir.core.instructions.capture import (
+    Instruction_ceoh,
+    Instruction_ceos,
     Instruction_cpoh,
     Instruction_cpos,
     Instruction_csoh,
     Instruction_csos,
+    Instruction_lceos,
     Instruction_lcpos,
     Instruction_lcsos,
     Instruction_scsoh,
@@ -214,8 +217,25 @@ class Deallocator:
                 self._add_variable_usage(instr.var_dst)
             elif isinstance(instr, Instruction_load):
                 self._add_variable_usage(instr.var)
-            elif isinstance(instr, (Instruction_scsoh, Instruction_csos, Instruction_csoh, Instruction_lcsos)):
-                for arg in instr.struct.args:
+            elif isinstance(
+                instr,
+                (
+                    Instruction_scsoh,
+                    Instruction_csos,
+                    Instruction_csoh,
+                    Instruction_lcsos,
+                    Instruction_ceoh,
+                    Instruction_ceos,
+                    Instruction_lceos,
+                ),
+            ):
+                if hasattr(instr, "struct"):
+                    args = instr.struct.args
+                elif instr.enum.payload is not None:
+                    args = instr.enum.payload.args
+                else:
+                    args = []
+                for arg in args:
                     self._add_variable_usage(arg)
             elif isinstance(instr, Instruction_hfree):
                 self._add_variable_usage(instr.var)

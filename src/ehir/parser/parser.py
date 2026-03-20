@@ -1,12 +1,16 @@
 from ehir.core.block import Block
-from ehir.core.derectives import Derective_fn, Derective_struct
+from ehir.core.derectives import Derective_enum, Derective_fn, Derective_struct
 from ehir.core.derectives.base import Derective
+from ehir.core.enum import Enum, EnumVariant
 from ehir.core.instructions.base import Instruction
 from ehir.core.instructions.capture import (
+    Instruction_ceoh,
+    Instruction_ceos,
     Instruction_cpoh,
     Instruction_cpos,
     Instruction_csoh,
     Instruction_csos,
+    Instruction_lceos,
     Instruction_lcpos,
     Instruction_lcsos,
     Instruction_scpoh,
@@ -31,6 +35,7 @@ from ehir.core.instructions.memory import (
     Instruction_put,
     Instruction_sgetfield,
     Instruction_sgetfieldptr,
+    Instruction_store,
 )
 from ehir.core.instructions.memory.halloc import Instruction_halloc
 from ehir.core.instructions.memory.load import Instruction_load
@@ -75,12 +80,35 @@ class Parser:
 
             if isinstance(current_token, t.FN):
                 self._ast.append(self._parse_fn())
+            elif isinstance(current_token, t.ENUM):
+                self._ast.append(self._parse_enum())
             elif isinstance(current_token, t.STRUCT):
                 self._ast.append(self._parse_struct())
             else:
                 raise ValueError(f"Unexpected token {current_token}")
 
         return self._ast
+
+    def _parse_enum(self) -> Derective_enum:
+        self._safe_consume(t.ENUM)
+        name = self._safe_consume(t.IDENTIFIER).string
+
+        generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+
+        variants = []
+        self._safe_consume(t.LEFT_BRACE)
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
+            variant_name = self._safe_consume(t.IDENTIFIER).string
+            variant_type = None
+            if isinstance(self._lookup_curr(), t.LEFT_PAREN):
+                self._safe_consume(t.LEFT_PAREN)
+                if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
+                    variant_type = self._parse_type()
+                self._safe_consume(t.RIGHT_PAREN)
+            variants.append(EnumVariant(name=variant_name, type=variant_type))
+        self._safe_consume(t.RIGHT_BRACE)
+
+        return Derective_enum(name=name, generics=generics, variants=variants)
 
     def _parse_struct(self) -> Derective_struct:
         self._safe_consume(t.STRUCT)
@@ -147,6 +175,8 @@ class Parser:
             return self._parse_switch()
         elif isinstance(curr_token, t.PUT):
             return self._parse_put()
+        elif isinstance(curr_token, t.STORE):
+            return self._parse_store()
         elif isinstance(curr_token, t.HFREE):
             return self._parse_hfree()
 
@@ -166,6 +196,13 @@ class Parser:
         self._safe_consume(t.COMMA)
         var = self._parse_variable()
         return Instruction_put(var=var, primitive=prim)
+
+    def _parse_store(self) -> Instruction_store:
+        self._safe_consume(t.STORE)
+        var_src = self._parse_variable()
+        self._safe_consume(t.COMMA)
+        var_dst = self._parse_variable()
+        return Instruction_store(var_src=var_src, var_dst=var_dst)
 
     def _parse_br(self) -> Instruction_br:
         self._safe_consume(t.BR)
@@ -217,6 +254,14 @@ class Parser:
             primitive = self._parse_primitive()
             return Instruction_cpos(var_out=var, primitive=primitive)
 
+        elif isinstance(curr_token, t.CEOH):
+            enum = self._parse_enum_init()
+            return Instruction_ceoh(var_out=var, enum=enum)
+
+        elif isinstance(curr_token, t.CEOS):
+            enum = self._parse_enum_init()
+            return Instruction_ceos(var_out=var, enum=enum)
+
         elif isinstance(curr_token, t.CPOH):
             primitive = self._parse_primitive()
             return Instruction_cpoh(var_out=var, primitive=primitive)
@@ -248,6 +293,10 @@ class Parser:
         elif isinstance(curr_token, t.LCPOS):
             primitive = self._parse_primitive()
             return Instruction_lcpos(var_out=var, primitive=primitive)
+
+        elif isinstance(curr_token, t.LCEOS):
+            enum = self._parse_enum_init()
+            return Instruction_lceos(var_out=var, enum=enum)
 
         elif isinstance(curr_token, t.LCSOS):
             struct = self._parse_struct_init()
@@ -407,6 +456,17 @@ class Parser:
                 params.append(self._parse_variable())
         self._safe_consume(t.RIGHT_PAREN)
         return Struct(struct_as_type.name, struct_as_type.generics, params)
+
+    def _parse_enum_init(self) -> Enum:
+        enum_as_type = self._parse_type()
+        self._safe_consume(t.DOUBLE_COLON)
+        variant = self._safe_consume(t.IDENTIFIER).string
+        self._safe_consume(t.LEFT_PAREN)
+        payload = None
+        if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
+            payload = self._parse_struct_init()
+        self._safe_consume(t.RIGHT_PAREN)
+        return Enum(name=enum_as_type.name, generics=enum_as_type.generics, variant=variant, payload=payload)
 
     def _parse_variable(self) -> Variable:
         name = self._safe_consume(t.IDENTIFIER)

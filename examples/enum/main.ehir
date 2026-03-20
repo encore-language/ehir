@@ -1,0 +1,53 @@
+struct Empty {}
+
+struct LinkNode[T] {
+    value: T
+    next: List[T]*
+}
+
+enum List[T] {
+    Link(LinkNode[T])
+    Empty(Empty)
+}
+
+fn main() -> u32 {
+  $entry:
+    tag_link: u8 = lcpos 0_u8
+    one: u32 = lcpos 1_u32
+    two: u32 = lcpos 2_u32
+
+    empty_value: List[u32] = lceos List[u32]::Empty(Empty())
+
+    a: List[u32]* = halloc List[u32]
+    b: List[u32]* = halloc List[u32]
+
+    a_node: LinkNode[u32]* = halloc LinkNode[u32]
+    b_node: LinkNode[u32]* = halloc LinkNode[u32]
+
+    a_value_ptr = getfieldptr a_node, value
+    a_next_ptr = getfieldptr a_node, next
+    b_value_ptr = getfieldptr b_node, value
+    b_next_ptr = getfieldptr b_node, next
+
+    store one, a_value_ptr
+    store b, a_next_ptr
+    store two, b_value_ptr
+    store a, b_next_ptr
+
+    a_tag_ptr = getfieldptr a, tag
+    a_link_ptr = getfieldptr a, Link
+    b_tag_ptr = getfieldptr b, tag
+    b_link_ptr = getfieldptr b, Link
+
+    store tag_link, a_tag_ptr
+    store a_node, a_link_ptr
+    store tag_link, b_tag_ptr
+    store b_node, b_link_ptr
+
+    a_link = getfield a, Link
+    b_link = getfield b, Link
+    a_value = getfield a_link, value
+    b_value = getfield b_link, value
+    sum = add a_value, b_value
+    ret sum
+}
