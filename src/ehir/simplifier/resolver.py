@@ -1,4 +1,5 @@
 from copy import deepcopy
+from dataclasses import fields, is_dataclass
 
 from ehir.core.derectives import Derective_fn, Derective_struct
 from ehir.core.derectives.base import Derective
@@ -81,13 +82,20 @@ class Resolver:
             self._resolve(fn)
 
         # drop generics
-        new_functions = [f for f in self.fn if f not in {x.name for x in base_fns}]
+        base_function_names = {x.name for x in base_fns}
+        base_struct_names = {x.name for x in self.structs.values() if x.generics}
+        new_structs = [s for s in self.structs if s not in {x.name for x in ast if isinstance(x, Derective_struct)}]
+        new_functions = [f for f in self.fn if f not in base_function_names]
         new_ast = []
 
+        for derective in new_structs:
+            new_ast.append(self.structs[derective])
         for derective in new_functions:
             new_ast.append(self.fn[derective])
 
         for derective in ast[::-1]:
+            if isinstance(derective, Derective_struct) and derective.name in base_struct_names:
+                continue
             if isinstance(derective, Derective_fn) and derective.generics:
                 continue
             new_ast.append(derective)
@@ -98,6 +106,9 @@ class Resolver:
         variables: dict[str, Variable] = {}
 
         def add_variable(var: Variable) -> Variable:
+            if var.type is not None:
+                var.type = self._resolve_type(var.type)
+
             if var.name not in variables:
                 variables[var.name] = var
                 return var
@@ -115,10 +126,15 @@ class Resolver:
 
         # step 0: Collect all variables
         for param in fn.params:
+            if param.type is not None:
+                param.type = self._resolve_type(param.type)
             add_variable(param)
 
         for block in fn.body:
             for instr in block.body:
+                if isinstance(instr, Assignable) and instr.var_out.type is not None:
+                    instr.var_out.type = self._resolve_type(instr.var_out.type)
+
                 if isinstance(instr, (Instruction_cpos, Instruction_cpoh, Instruction_scpos, Instruction_scpoh)):
                     if isinstance(instr, (Instruction_cpos, Instruction_cpoh)):
                         pointer_t = Pointer
@@ -135,6 +151,7 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
 
                 elif isinstance(instr, (Instruction_csos, Instruction_csoh, Instruction_scsos, Instruction_scsoh)):
+                    instr.struct = self._resolve_struct(instr.struct)
                     if isinstance(instr, (Instruction_csos, Instruction_csoh)):
                         pointer_t = Pointer
                     elif isinstance(instr, Instruction_scsos):
@@ -149,8 +166,9 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
+                    struct_params = self._get_struct_params(instr.struct.name, instr.struct.generics)
                     for i, arg in enumerate(instr.struct.args):
-                        expected_type = self.structs[instr.struct.name].params[i].type
+                        expected_type = struct_params[i].type
 
                         if arg.type is not None and arg.type != expected_type:
                             raise TypeError(
@@ -170,6 +188,7 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
 
                 elif isinstance(instr, Instruction_lcsos):
+                    instr.struct = self._resolve_struct(instr.struct)
                     expected_type = instr.struct.as_type()
 
                     if instr.var_out.type and instr.var_out.type != expected_type:
@@ -178,8 +197,9 @@ class Resolver:
                         )
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
+                    struct_params = self._get_struct_params(instr.struct.name, instr.struct.generics)
                     for i, arg in enumerate(instr.struct.args):
-                        expected_type = self.structs[instr.struct.name].params[i].type
+                        expected_type = struct_params[i].type
 
                         if arg.type is not None and arg.type != expected_type:
                             raise TypeError(
@@ -194,15 +214,17 @@ class Resolver:
                 ):
                     instr.src = add_variable(instr.src)
                     assert instr.src.type
+                    instr.src.type = self._resolve_type(instr.src.type)
 
                     if isinstance(instr.src.type, PrimitiveType):
                         raise TypeError(f"Cannot access field of primitive type '{instr.src.type}'")
 
-                    if (corresponding_struct := self.structs.get(instr.src.type.name, None)) is None:
+                    if self.structs.get(instr.src.type.name, None) is None:
                         raise TypeError(f"Unknown struct '{instr.src.type.name}'")
 
-                    for i, param in enumerate(corresponding_struct.params):
-                        if param.name == instr.field.name:
+                    resolved_params = self._get_struct_params(instr.src.type.name, instr.src.type.generics)
+                    for i, param in enumerate(resolved_params):
+                        if param.name == instr.field.name or str(i) == instr.field.name:
                             if instr.field.type and instr.field.type != param.type:
                                 raise TypeError(
                                     f"Type mismatch for field '{instr.field.name}' in struct '{instr.src.type.name}': {instr.field.type} != {param.type}"
@@ -226,6 +248,7 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
 
                 elif isinstance(instr, Instruction_ret):
+                    fn.ret_type = self._resolve_type(fn.ret_type)
                     expected_type = fn.ret_type
                     if instr.var.type and instr.var.type != expected_type:
                         raise TypeError(f"Type mismatch for return value: {instr.var.type} != {expected_type}")
@@ -265,6 +288,7 @@ class Resolver:
                     instr.args = [add_variable(arg) for arg in instr.args]
                     target_fn = self.fn[instr.fn_name]
                     if target_fn.generics:
+                        instr.generics = [self._resolve_type(generic) for generic in instr.generics]
                         concrete_name = target_fn.get_conrete_name(instr.generics)
                         if concrete_name not in self.fn:
                             target_fn = self._concrete_fn(target_fn, instr.generics)
@@ -312,6 +336,7 @@ class Resolver:
                 elif isinstance(instr, Instruction_switch):
                     instr.cond_var = add_variable(instr.cond_var)
                 elif isinstance(instr, Instruction_salloc):
+                    instr.type = self._resolve_type(instr.type)
                     expected_type = Pointer(instr.type)
                     if instr.var_out.type and instr.var_out.type != expected_type:
                         raise TypeError(
@@ -341,6 +366,7 @@ class Resolver:
                     instr.var = add_variable(instr.var)
                 elif isinstance(instr, Instruction_pcast):
                     instr.var = add_variable(instr.var)
+                    instr.type = self._resolve_type(instr.type)
 
                     expected_type = instr.type
                     if instr.var_out.type is not None:
@@ -376,24 +402,105 @@ class Resolver:
         generic_mapping = {a.name: b for a, b in zip(fn.generics, types)}
 
         base = deepcopy(fn)
+        self._rewrite_types(base, generic_mapping)
         base.generics.clear()
         base.name = base.get_conrete_name(types)
-        for arg in base.params:
-            if arg.type.name not in generic_mapping:
-                continue
-            arg.type = generic_mapping[arg.type.name]
-
-        for block in base.body:
-            for instr in block.get_body():
-                if not isinstance(instr, Assignable):
-                    continue
-                if instr.var_out.type and instr.var_out.type.name in generic_mapping:
-                    instr.var_out.type = generic_mapping[instr.var_out.type.name]
-
-        if base.ret_type.name in generic_mapping:
-            base.ret_type = generic_mapping[base.ret_type.name]
-
         self.fn[base.name] = base
         self._resolve(base)
 
         return base
+
+    def _concrete_struct(self, struct: Derective_struct, types: list[Type]) -> Derective_struct:
+        assert len(struct.generics) == len(types)
+        generic_mapping = {a.name: b for a, b in zip(struct.generics, types)}
+
+        base = deepcopy(struct)
+        self._rewrite_types(base, generic_mapping)
+        base.generics.clear()
+        base.name = base.get_conrete_name(types)
+        self.structs[base.name] = base
+        return base
+
+    def _resolve_struct(self, struct):
+        self._rewrite_types(struct, {})
+        target_struct = self.structs.get(struct.name)
+        if target_struct is None or not target_struct.generics:
+            return struct
+
+        concrete_name = target_struct.get_conrete_name(struct.generics)
+        if concrete_name not in self.structs:
+            self._concrete_struct(target_struct, struct.generics)
+
+        struct.name = concrete_name
+        struct.generics.clear()
+        return struct
+
+    def _get_struct_params(self, struct_name: str, generics: list[Type]):
+        struct = self.structs[struct_name]
+        if not struct.generics:
+            return struct.params
+
+        if len(struct.generics) != len(generics):
+            return struct.params
+
+        params = deepcopy(struct.params)
+        self._rewrite_types(params, {a.name: b for a, b in zip(struct.generics, generics)})
+        return params
+
+    def _resolve_type(self, typ: Type) -> Type:
+        return self._replace_type(typ, {})
+
+    def _replace_type(self, typ: Type, generic_mapping: dict[str, Type]) -> Type:
+        if isinstance(typ, HeapSmartPointer):
+            return HeapSmartPointer(self._replace_type(typ.pointee, generic_mapping))
+        if isinstance(typ, StackSmartPointer):
+            return StackSmartPointer(self._replace_type(typ.pointee, generic_mapping))
+        if isinstance(typ, Pointer):
+            return Pointer(self._replace_type(typ.pointee, generic_mapping))
+
+        if not typ.generics and typ.name in generic_mapping:
+            return deepcopy(generic_mapping[typ.name])
+
+        resolved = deepcopy(typ)
+        resolved.generics = [self._replace_type(generic, generic_mapping) for generic in typ.generics]
+
+        target_struct = self.structs.get(resolved.name)
+        if (
+            target_struct is not None
+            and target_struct.generics
+            and all(self._is_concrete_type(generic) for generic in resolved.generics)
+        ):
+            concrete_name = target_struct.get_conrete_name(resolved.generics)
+            if concrete_name not in self.structs:
+                self._concrete_struct(target_struct, resolved.generics)
+            return Type(concrete_name)
+
+        return resolved
+
+    def _is_concrete_type(self, typ: Type) -> bool:
+        if isinstance(typ, (HeapSmartPointer, StackSmartPointer, Pointer)):
+            return self._is_concrete_type(typ.pointee)
+
+        if isinstance(typ, PrimitiveType):
+            return True
+
+        if typ.generics and not all(self._is_concrete_type(generic) for generic in typ.generics):
+            return False
+
+        return typ.name in self.structs or not typ.name.isidentifier() or typ.name.startswith("u")
+
+    def _rewrite_types(self, value, generic_mapping: dict[str, Type]):
+        if isinstance(value, Type):
+            return self._replace_type(value, generic_mapping)
+
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                value[i] = self._rewrite_types(item, generic_mapping)
+            return value
+
+        if not is_dataclass(value):
+            return value
+
+        for field in fields(value):
+            setattr(value, field.name, self._rewrite_types(getattr(value, field.name), generic_mapping))
+        return value
