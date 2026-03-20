@@ -16,7 +16,7 @@ class Compiler:
 
     def compile(self, source_code: str, name: str) -> ProcessedModule:
         ast = self._parser.parse(source_code)
-        # print(*ast, sep="\n")
+        print(*ast, sep="\n")
 
         ast = self._resolver.run(ast)
         print(*ast, sep="\n")
