@@ -1,24 +1,77 @@
-fn main() -> u8 {
-  $entry
-    var_ptr = cpos 0_u8
-    var = load var_ptr
-    switch var, $default {
-        0_u8 => $case_zero
-        1_u8 => $case_one
-    }
-  $case_zero:
-    res = call increment(var)
-    ret res
-  $case_one:
-    cbr var, $case_zero, $default
-  $default:
-    br $case_zero
+struct Vector3D {
+  x: u32
+  y: u32
+  z: u32
 }
-
-fn increment(value: u8) -> u8 {
+struct Matrix3D {
+  x: Vector3D
+  y: Vector3D
+  z: Vector3D
+}
+fn comute_determinant(m: Matrix3D<H>) -> u32 {
   $entry:
-    one_ptr = cpos 1_u8
-    one = load one_ptr
-    res = add value, one
-    ret res
+    _0 = sgetfield m, x
+    _1 = getfield _0, x
+    _2 = sgetfield m, y
+    _3 = getfield _2, y
+    _4 = sgetfield m, z
+    _5 = getfield _4, z
+    _6 = mul _3, _5
+    _7 = sgetfield m, y
+    _8 = getfield _7, z
+    _9 = sgetfield m, z
+    _10 = getfield _9, y
+    _11 = mul _8, _10
+    _12 = sub _6, _11
+    part1 = mul _1, _12
+    _13 = sgetfield m, x
+    _14 = getfield _13, y
+    _15 = sgetfield m, y
+    _16 = getfield _15, x
+    _17 = sgetfield m, z
+    _18 = getfield _17, z
+    _19 = mul _16, _18
+    _20 = sgetfield m, y
+    _21 = getfield _20, z
+    _22 = sgetfield m, z
+    _23 = getfield _22, x
+    _24 = mul _21, _23
+    _25 = sub _19, _24
+    part2 = mul _14, _25
+    _26 = sgetfield m, x
+    _27 = getfield _26, z
+    _28 = sgetfield m, y
+    _29 = getfield _28, x
+    _30 = sgetfield m, z
+    _31 = getfield _30, y
+    _32 = mul _29, _31
+    _33 = sgetfield m, y
+    _34 = getfield _33, y
+    _35 = sgetfield m, z
+    _36 = getfield _35, x
+    _37 = mul _34, _36
+    _38 = sub _32, _37
+    part3 = mul _27, _38
+    _39 = sub part1, part2
+    _40 = add _39, part3
+    ret _40
+}
+fn main() -> u32 {
+  $entry:
+    a: u32 = lcpos 5_u32
+    _42: u32 = lcpos 1_u32
+    _43: u32 = lcpos 1_u32
+    _44: u32 = lcpos 1_u32
+    x_vec: Vector3D = lcsos Vector3D(_42: u32, _43: u32, _44: u32)
+    _45: u32 = lcpos 2_u32
+    _46: u32 = lcpos 2_u32
+    _47: u32 = lcpos 2_u32
+    y_vec: Vector3D = lcsos Vector3D(_45: u32, _46: u32, _47: u32)
+    _48: u32 = lcpos 3_u32
+    _49: u32 = lcpos 3_u32
+    _50: u32 = lcpos 3_u32
+    z_vec: Vector3D = lcsos Vector3D(_48: u32, _49: u32, _50: u32)
+    matrix: Matrix3D<H> = scsoh Matrix3D(x_vec: Vector3D, y_vec: Vector3D, z_vec: Vector3D)
+    _51 = call comute_determinant(matrix: Matrix3D<H>)
+    ret _51
 }

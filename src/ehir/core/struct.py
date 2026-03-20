@@ -1,0 +1,17 @@
+from dataclasses import dataclass
+
+from ehir.core.type import Type
+from ehir.core.variable import Variable
+
+
+@dataclass
+class Struct:
+    name: str
+    args: list[Variable]
+
+    def as_type(self) -> Type:
+        return Type(self.name)
+
+    def __str__(self) -> str:
+        params_repr = ", ".join(str(p) for p in self.args)
+        return f"{self.name}({params_repr})"

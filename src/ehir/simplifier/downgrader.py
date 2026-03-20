@@ -1,0 +1,356 @@
+from ehir.core.block import TerminatedBlock
+from ehir.core.derectives import Derective_struct
+from ehir.core.derectives.base import Derective
+from ehir.core.instructions.base import Instruction
+from ehir.core.instructions.capture import (
+    Instruction_cpoh,
+    Instruction_cpos,
+    Instruction_csoh,
+    Instruction_csos,
+    Instruction_lcpos,
+    Instruction_lcsos,
+    Instruction_scpoh,
+    Instruction_scpos,
+    Instruction_scsoh,
+    Instruction_scsos,
+)
+from ehir.core.instructions.control_flow import Instruction_phi
+from ehir.core.instructions.control_flow.base import ControlFlow
+from ehir.core.instructions.control_flow.br import Instruction_br
+from ehir.core.instructions.control_flow.cbr import Instruction_cbr
+from ehir.core.instructions.control_flow.ret import Instruction_ret
+from ehir.core.instructions.control_flow.switch import Instruction_switch
+from ehir.core.instructions.memory import (
+    Instruction_getfield,
+    Instruction_getfieldptr,
+    Instruction_getptr,
+    Instruction_hfree,
+    Instruction_pcast,
+    Instruction_put,
+    Instruction_sgetfield,
+    Instruction_sgetfieldptr,
+    Instruction_store,
+)
+from ehir.core.instructions.memory.halloc import Instruction_halloc
+from ehir.core.instructions.memory.load import Instruction_load
+from ehir.core.instructions.memory.salloc import Instruction_salloc
+from ehir.core.instructions.operators.base import BinOp
+from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
+from ehir.core.instructions.special import Instruction_comment
+from ehir.core.instructions.special.call import Instruction_call
+from ehir.core.primitives import Usize, Usize_t
+from ehir.core.struct import Struct
+from ehir.core.type import HeapSmartPointer, Pointer
+from ehir.core.variable import TypedVariable
+from ehir.simplifier.normalizer.norm_fn import Normalized_fn
+
+SKIPABLE = (
+    Instruction_ret,
+    BinOp,
+    Instruction_and,
+    Instruction_or,
+    Instruction_ieq,
+    Instruction_neq,
+    Instruction_store,
+    Instruction_call,
+    Instruction_switch,
+    Instruction_salloc,
+    Instruction_load,
+    Instruction_put,
+    Instruction_hfree,
+    Instruction_getfieldptr,
+    Instruction_pcast,
+    Instruction_getptr,
+    Instruction_comment,
+    Instruction_halloc,
+    Instruction_phi,
+)
+
+ENABLE_COMMENTS: bool = True
+
+
+class Downgrader:
+    _structs: dict[str, Derective_struct]
+    _structs_to_add: list[Derective_struct]
+    _fns: dict[str, Normalized_fn]
+    _fns_to_add: list[Normalized_fn]
+
+    def run(self, ast: list[Derective]):
+        self._structs = {}
+        self._structs_to_add = []
+        self._fns = {}
+        self._fns_to_add = []
+
+        for derective in ast:
+            if isinstance(derective, Derective_struct):
+                self._structs[derective.name] = derective
+
+        for derective in ast:
+            if isinstance(derective, Normalized_fn):
+                self._fns[derective.name] = derective
+
+        for derective in ast:
+            if isinstance(derective, Normalized_fn):
+                self._downgrade_function(derective)
+
+        # Add new structs
+        ast.extend(self._structs_to_add)
+        ast.extend(self._fns_to_add)
+
+    def _downgrade_function(self, fn: Normalized_fn):
+        for block in fn.get_body():
+            assert isinstance(block, TerminatedBlock)
+            new_body = []
+            for instr in block.get_body():
+                new = self._downgrade(instr)
+                if not isinstance(instr, ControlFlow):
+                    new_body.extend(new)
+                else:
+                    term = new.pop()
+                    assert isinstance(term, ControlFlow)
+                    new_body.extend(new)
+                    block.term = term
+
+            block.body = new_body
+
+    def _downgrade(self, instr: Instruction) -> list[Instruction]:
+        if isinstance(instr, Instruction_cpos):
+            return self._downgrade_cpos(instr)
+        elif isinstance(instr, Instruction_cpoh):
+            return self._downgrade_cpoh(instr)
+        elif isinstance(instr, Instruction_csos):
+            return self._downgrade_csos(instr)
+        elif isinstance(instr, Instruction_csoh):
+            return self._downgrade_csoh(instr)
+        elif isinstance(instr, Instruction_scpos):
+            return self._downgrade_scpos(instr)
+        elif isinstance(instr, Instruction_scpoh):
+            return self._downgrade_scpoh(instr)
+        elif isinstance(instr, Instruction_scsos):
+            return self._downgrade_scsos(instr)
+        elif isinstance(instr, Instruction_scsoh):
+            return self._downgrade_scsoh(instr)
+        elif isinstance(instr, Instruction_lcpos):
+            return self._downgrade_lcpos(instr)
+        elif isinstance(instr, Instruction_lcsos):
+            return self._downgrade_lcsos(instr)
+        elif isinstance(instr, Instruction_getfield):
+            return self._downgrade_getfield(instr)
+        elif isinstance(instr, Instruction_sgetfield):
+            return self._downgrade_sgetfield(instr)
+        elif isinstance(instr, Instruction_sgetfieldptr):
+            return self._downgrade_sgetfieldptr(instr)
+        elif isinstance(instr, Instruction_cbr):
+            return self._downgrade_cbr(instr)
+        elif isinstance(instr, Instruction_br):
+            return self._downgrade_br(instr)
+        elif isinstance(instr, SKIPABLE):
+            return [instr]
+        else:
+            raise NotImplementedError(f"Downgrading instruction for {type(instr)}:{instr} not implemented")
+
+    def _downgrade_cpos(self, instr: Instruction_cpos) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+
+        salloc = Instruction_salloc(
+            var_out=instr.var_out,
+            type=instr.var_out.type.pointee,
+        )
+        put = Instruction_put(
+            primitive=instr.primitive,
+            var=instr.var_out,
+        )
+        return [
+            salloc,
+            put,
+        ]
+
+    def _downgrade_cpoh(self, instr: Instruction_cpoh) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+
+        halloc = Instruction_halloc(
+            var_out=instr.var_out,
+            type=instr.var_out.type.pointee,
+        )
+        put = Instruction_put(
+            primitive=instr.primitive,
+            var=instr.var_out,
+        )
+        return [
+            halloc,
+            put,
+        ]
+
+    def _downgrade_csos(self, instr: Instruction_csos) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+
+        salloc = Instruction_salloc(
+            var_out=instr.var_out,
+            type=instr.struct.as_type(),
+        )
+        downgrades = [salloc]
+        for i, arg in enumerate(instr.struct.args):
+            assert arg.type
+            field_arg = TypedVariable(name=f".{instr.var_out.name}.{arg.name}", type=Pointer(arg.type))
+            field_ptr = Instruction_getfieldptr(
+                var_out=field_arg, src=instr.var_out, field=TypedVariable(name=str(i), type=arg.type)
+            )
+
+            store = Instruction_store(
+                var_src=arg,
+                var_dst=field_arg,
+            )
+            downgrades.append(field_ptr)
+            downgrades.append(store)
+
+        return downgrades
+
+    def _downgrade_csoh(self, instr: Instruction_csoh) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert isinstance(instr.var_out.type, Pointer)
+
+        halloc = Instruction_halloc(
+            var_out=instr.var_out,
+            type=instr.struct.as_type(),
+        )
+        downgrades = [halloc]
+        for i, arg in enumerate(instr.struct.args):
+            assert arg.type
+            field_arg = TypedVariable(name=f".{instr.var_out.name}.{arg.name}", type=Pointer(arg.type))
+            field_ptr = Instruction_getfieldptr(
+                var_out=field_arg, src=instr.var_out, field=TypedVariable(name=str(i), type=arg.type)
+            )
+
+            store = Instruction_store(
+                var_src=arg,
+                var_dst=field_arg,
+            )
+            downgrades.append(field_ptr)
+            downgrades.append(store)
+
+        return downgrades
+
+    def _downgrade_scpos(self, instr: Instruction_scpos) -> list[Instruction]:
+        raise NotImplementedError
+
+    def _downgrade_scpoh(self, instr: Instruction_scpoh) -> list[Instruction]:
+        raise NotImplementedError
+
+    def _downgrade_scsos(self, instr: Instruction_scsos) -> list[Instruction]:
+        raise NotImplementedError
+
+    def _downgrade_scsoh(self, instr: Instruction_scsoh) -> list[Instruction]:
+        ptr = TypedVariable(name=f".{instr.var_out.name}_wrapped_ptr", type=Pointer(instr.struct.as_type()))
+        ref_cnt = TypedVariable(name=f".{instr.var_out.name}_ref_cnt", type=Usize_t())
+        in_reachable = TypedVariable(name=f".{instr.var_out.name}_in_reachable", type=Usize_t(1))
+        out_reachable = TypedVariable(name=f".{instr.var_out.name}_out_reachable", type=Usize_t(1))
+        out_visited = TypedVariable(name=f".{instr.var_out.name}_out_visited", type=Usize_t(1))
+        deallocate = TypedVariable(name=f".{instr.var_out.name}_deallocate", type=Usize_t(1))
+
+        ptr_init = Instruction_csoh(ptr, instr.struct)
+        ref_cnt_init = Instruction_lcpos(ref_cnt, Usize(val=1))
+        in_reachable_init = Instruction_lcpos(in_reachable, Usize(val=1, size=1))
+        out_reachable_init = Instruction_lcpos(out_reachable, Usize(val=0, size=1))
+        out_visited_init = Instruction_lcpos(out_visited, Usize(val=0, size=1))
+        deallocate_init = Instruction_lcpos(deallocate, Usize(val=0, size=1))
+
+        s = Struct(name=HeapSmartPointer(instr.struct.as_type()).get_name(), args=[ptr])
+        instr.var_out.type = s.as_type()
+        res = Instruction_lcsos(instr.var_out, s)
+
+        return [
+            *self._downgrade_csoh(ptr_init),
+            *self._downgrade_lcpos(ref_cnt_init),
+            *self._downgrade_lcpos(in_reachable_init),
+            *self._downgrade_lcpos(out_reachable_init),
+            *self._downgrade_lcpos(out_visited_init),
+            *self._downgrade_lcpos(deallocate_init),
+            *self._downgrade_lcsos(res),
+        ]
+
+    def _downgrade_lcpos(self, instr: Instruction_lcpos) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        out_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
+        cpos = Instruction_cpos(
+            var_out=out_ptr,
+            primitive=instr.primitive,
+        )
+        load = Instruction_load(var_out=instr.var_out, var=out_ptr)
+        return [
+            *self._downgrade_cpos(cpos),
+            load,
+        ]
+
+    def _downgrade_lcsos(self, instr: Instruction_lcsos) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        out_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
+        csos = Instruction_csos(var_out=out_ptr, struct=instr.struct)
+        load = Instruction_load(var_out=instr.var_out, var=out_ptr)
+        return [
+            *self._downgrade_csos(csos),
+            load,
+        ]
+
+    def _downgrade_getfield(self, instr: Instruction_getfield) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        out_ptr = TypedVariable(name=f".{instr.var_out.name}_ptr", type=Pointer(instr.var_out.type))
+        getfieldptr = Instruction_getfieldptr(var_out=out_ptr, src=instr.src, field=instr.field)
+        load = Instruction_load(var_out=instr.var_out, var=out_ptr)
+        return [
+            getfieldptr,
+            load,
+        ]
+
+    def _downgrade_sgetfield(self, instr: Instruction_sgetfield) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert instr.src.type
+        wrapped_struct = self._structs[instr.src.type.name]
+        wrapped_struct_ptr = TypedVariable(name=f".{instr.var_out.name}_sgf_ptr", type=wrapped_struct.params[0].type)
+        getfield1 = Instruction_getfield(
+            var_out=wrapped_struct_ptr, src=instr.src, field=TypedVariable("0", wrapped_struct.params[0].type)
+        )
+        getfield2 = Instruction_getfield(var_out=instr.var_out, src=wrapped_struct_ptr, field=instr.field)
+        return [
+            *self._downgrade_getfield(getfield1),
+            *self._downgrade_getfield(getfield2),
+        ]
+
+    def _downgrade_sgetfieldptr(self, instr: Instruction_sgetfieldptr) -> list[Instruction]:
+        assert instr.var_out.type is not None
+        assert instr.src.type
+        wrapped_struct = self._structs[instr.src.type.name]
+        wrapped_struct_ptr = TypedVariable(name=f".{instr.var_out.name}_sgfptr_ptr", type=wrapped_struct.params[0].type)
+        getfield = Instruction_getfield(
+            var_out=wrapped_struct_ptr, src=instr.src, field=TypedVariable("0", wrapped_struct.params[0].type)
+        )
+        getfieldptr = Instruction_getfieldptr(var_out=instr.var_out, src=wrapped_struct_ptr, field=instr.field)
+        return [*self._downgrade_getfield(getfield), getfieldptr]
+
+    def _downgrade_cbr(self, instr: Instruction_cbr) -> list[Instruction]:
+        assert instr.cond_var.type is not None
+        assert isinstance(instr.cond_var.type, Usize_t)
+
+        switch = Instruction_switch(
+            cond_var=instr.cond_var,
+            default_case=instr.else_br_label,
+            cases=[(Usize(1, size=instr.cond_var.type.size), instr.true_br_label)],
+        )
+        return [switch]
+
+    def _downgrade_br(self, instr: Instruction_br) -> list[Instruction]:
+        zero_ptr = TypedVariable(name=".br_zero_ptr", type=Pointer(Usize_t(1)))
+        zero = TypedVariable(name=".br_zero", type=Usize_t(1))
+        cpos = Instruction_cpos(var_out=zero_ptr, primitive=Usize(0, size=1))
+        load = Instruction_load(
+            var_out=zero,
+            var=zero_ptr,
+        )
+        switch = Instruction_switch(
+            cond_var=zero,
+            default_case=instr.label,
+            cases=[],
+        )
+        return [*self._downgrade_cpos(cpos), load, switch]
