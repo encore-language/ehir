@@ -98,15 +98,7 @@ class Parser:
         self._safe_consume(t.FN)
         name = self._safe_consume(t.IDENTIFIER).string
 
-        generics = []
-        if isinstance(self._lookup_curr(), t.LEFT_BRACKET):
-            self._safe_consume(t.LEFT_BRACKET)
-            generics.append(self._parse_type())
-
-            while not isinstance(self._lookup_curr(), t.RIGHT_BRACKET):
-                self._safe_consume(t.COMMA)
-                generics.append(self._parse_type())
-            self._safe_consume(t.RIGHT_BRACKET)
+        generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
 
         params = []
         self._safe_consume(t.LEFT_PAREN)
@@ -261,6 +253,8 @@ class Parser:
 
         elif isinstance(curr_token, t.CALL):
             fn_name = self._safe_consume(t.IDENTIFIER).string
+            generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+
             args = []
             self._safe_consume(t.LEFT_PAREN)
             if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
@@ -269,7 +263,7 @@ class Parser:
                     self._safe_consume(t.COMMA)
                     args.append(self._parse_variable())
             self._safe_consume(t.RIGHT_PAREN)
-            return Instruction_call(var_out=var, fn_name=fn_name, args=args)
+            return Instruction_call(var_out=var, fn_name=fn_name, generics=generics, args=args)
 
         elif isinstance(curr_token, t.ADD):
             lhs = self._parse_variable()
@@ -450,6 +444,17 @@ class Parser:
             self._safe_consume(t.GREATER)
 
         return type
+
+    def _parse_generics(self) -> list[Type]:
+        generics = []
+
+        self._safe_consume(t.LEFT_BRACKET)
+        generics.append(self._parse_type())
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACKET):
+            self._safe_consume(t.COMMA)
+            generics.append(self._parse_type())
+        self._safe_consume(t.RIGHT_BRACKET)
+        return generics
 
     def _parse_primitive(self) -> Primitive:
         curr_token = self._consume()

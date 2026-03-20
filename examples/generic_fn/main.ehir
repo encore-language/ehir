@@ -16,7 +16,7 @@ fn main() -> u32 {
   $sum_it:
     c_1 = call sum[u32](a_1, b_1)
     c_2 = call sum(a_2, b_2)
-    c_2_u32 = cast c_2, u32
-    s = sum(c_1, c_2_u32)
+    c_2_u32 = pcast c_2, u32
+    s = call sum(c_1, c_2_u32)
     ret s
 }
