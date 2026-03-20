@@ -86,13 +86,15 @@ class Parser:
         self._safe_consume(t.STRUCT)
         name = self._safe_consume(t.IDENTIFIER).string
 
+        generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+
         params = []
         self._safe_consume(t.LEFT_BRACE)
         while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
             params.append(self._parse_param())
         self._safe_consume(t.RIGHT_BRACE)
 
-        return Derective_struct(name=name, params=params)
+        return Derective_struct(name=name, generics=generics, params=params)
 
     def _parse_fn(self) -> Derective_fn:
         self._safe_consume(t.FN)
@@ -395,7 +397,7 @@ class Parser:
         return Instruction_phi(var_out=var, args=args)
 
     def _parse_struct_init(self) -> Struct:
-        name = self._safe_consume(t.IDENTIFIER).string
+        struct_as_type = self._parse_type()
         params = []
         self._safe_consume(t.LEFT_PAREN)
         if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
@@ -404,7 +406,7 @@ class Parser:
                 self._safe_consume(t.COMMA)
                 params.append(self._parse_variable())
         self._safe_consume(t.RIGHT_PAREN)
-        return Struct(name, params)
+        return Struct(struct_as_type.name, struct_as_type.generics, params)
 
     def _parse_variable(self) -> Variable:
         name = self._safe_consume(t.IDENTIFIER)
@@ -423,11 +425,13 @@ class Parser:
 
     def _parse_type(self) -> Type | PrimitiveType | Pointer:
         name = self._safe_consume(t.IDENTIFIER).string
+
         type = Type(name)
         if name.startswith("u") and name[1:].isdigit():
             size = int(name[1:])
             type = Usize_t(size=size)
 
+        type.generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
         if isinstance(self._lookup_curr(), t.STAR):
             self._safe_consume(t.STAR)
             type = Pointer(type)
