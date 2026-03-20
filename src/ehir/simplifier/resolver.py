@@ -1,13 +1,17 @@
 from copy import deepcopy
 from dataclasses import fields, is_dataclass
 
-from ehir.core.derectives import Derective_fn, Derective_struct
+from ehir.core.derectives import Derective_enum, Derective_fn, Derective_struct
 from ehir.core.derectives.base import Derective
+from ehir.core.enum import Enum
 from ehir.core.instructions.base import Assignable
 from ehir.core.instructions.capture import (
+    Instruction_ceoh,
+    Instruction_ceos,
     Instruction_cpoh,
     Instruction_csoh,
     Instruction_csos,
+    Instruction_lceos,
     Instruction_lcpos,
     Instruction_lcsos,
     Instruction_scpoh,
@@ -28,11 +32,13 @@ from ehir.core.instructions.memory import (
     Instruction_getfield,
     Instruction_getfieldptr,
     Instruction_getptr,
+    Instruction_halloc,
     Instruction_hfree,
     Instruction_pcast,
     Instruction_put,
     Instruction_sgetfield,
     Instruction_sgetfieldptr,
+    Instruction_store,
 )
 from ehir.core.instructions.memory.load import Instruction_load
 from ehir.core.instructions.memory.salloc import Instruction_salloc
@@ -47,7 +53,7 @@ from ehir.core.instructions.operators.logic import Instruction_and, Instruction_
 from ehir.core.primitives import Usize_t
 from ehir.core.primitives.base import PrimitiveType
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
-from ehir.core.variable import TypedVariable, Variable
+from ehir.core.variable import Parameter, TypedVariable, Variable
 
 _BOOLEAN_INSTRUCTS = (
     # Comparison
@@ -65,15 +71,19 @@ _BOOLEAN_INSTRUCTS = (
 
 class Resolver:
     fn: dict[str, Derective_fn]
+    enums: dict[str, Derective_enum]
     structs: dict[str, Derective_struct]
 
     def run(self, ast: list[Derective]) -> list[Derective]:
         self.fn = {}
+        self.enums = {}
         self.structs = {}
 
         for derective in ast:
             if isinstance(derective, Derective_fn):
                 self.fn[derective.name] = derective
+            elif isinstance(derective, Derective_enum):
+                self.enums[derective.name] = derective
             elif isinstance(derective, Derective_struct):
                 self.structs[derective.name] = derective
 
@@ -83,17 +93,23 @@ class Resolver:
 
         # drop generics
         base_function_names = {x.name for x in base_fns}
+        base_enum_names = {x.name for x in self.enums.values() if x.generics}
         base_struct_names = {x.name for x in self.structs.values() if x.generics}
+        new_enums = [e for e in self.enums if e not in {x.name for x in ast if isinstance(x, Derective_enum)}]
         new_structs = [s for s in self.structs if s not in {x.name for x in ast if isinstance(x, Derective_struct)}]
         new_functions = [f for f in self.fn if f not in base_function_names]
         new_ast = []
 
+        for derective in new_enums:
+            new_ast.append(self.enums[derective])
         for derective in new_structs:
             new_ast.append(self.structs[derective])
         for derective in new_functions:
             new_ast.append(self.fn[derective])
 
         for derective in ast[::-1]:
+            if isinstance(derective, Derective_enum) and derective.name in base_enum_names:
+                continue
             if isinstance(derective, Derective_struct) and derective.name in base_struct_names:
                 continue
             if isinstance(derective, Derective_fn) and derective.generics:
@@ -150,6 +166,24 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
+                elif isinstance(instr, (Instruction_ceoh, Instruction_ceos)):
+                    instr.enum = self._resolve_enum(instr.enum)
+                    if isinstance(instr, Instruction_ceoh):
+                        expected_type = Pointer(instr.enum.as_type())
+                    else:
+                        expected_type = Pointer(instr.enum.as_type())
+
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+                    self._resolve_enum_payload(instr.enum)
+                    if instr.enum.payload is not None:
+                        for arg in instr.enum.payload.args:
+                            add_variable(arg)
+
                 elif isinstance(instr, (Instruction_csos, Instruction_csoh, Instruction_scsos, Instruction_scsoh)):
                     instr.struct = self._resolve_struct(instr.struct)
                     if isinstance(instr, (Instruction_csos, Instruction_csoh)):
@@ -187,6 +221,21 @@ class Resolver:
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
 
+                elif isinstance(instr, Instruction_lceos):
+                    instr.enum = self._resolve_enum(instr.enum)
+                    expected_type = instr.enum.as_type()
+
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
+                    self._resolve_enum_payload(instr.enum)
+                    if instr.enum.payload is not None:
+                        for arg in instr.enum.payload.args:
+                            add_variable(arg)
+
                 elif isinstance(instr, Instruction_lcsos):
                     instr.struct = self._resolve_struct(instr.struct)
                     expected_type = instr.struct.as_type()
@@ -219,10 +268,7 @@ class Resolver:
                     if isinstance(instr.src.type, PrimitiveType):
                         raise TypeError(f"Cannot access field of primitive type '{instr.src.type}'")
 
-                    if self.structs.get(instr.src.type.name, None) is None:
-                        raise TypeError(f"Unknown struct '{instr.src.type.name}'")
-
-                    resolved_params = self._get_struct_params(instr.src.type.name, instr.src.type.generics)
+                    resolved_params = self._get_composite_params(instr.src.type.name, instr.src.type.generics)
                     for i, param in enumerate(resolved_params):
                         if param.name == instr.field.name or str(i) == instr.field.name:
                             if instr.field.type and instr.field.type != param.type:
@@ -344,6 +390,15 @@ class Resolver:
                         )
                     instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
+                elif isinstance(instr, Instruction_halloc):
+                    instr.type = self._resolve_type(instr.type)
+                    expected_type = Pointer(instr.type)
+                    if instr.var_out.type and instr.var_out.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                        )
+                    instr.var_out.type = expected_type
+                    instr.var_out = add_variable(instr.var_out)
                 elif isinstance(instr, Instruction_put):
                     expected_type = Pointer(instr.primitive.type)
                     if instr.var.type and instr.var.type != expected_type:
@@ -362,6 +417,18 @@ class Resolver:
                         assert isinstance(instr.var.type, Pointer)
                         instr.var_out.type = instr.var.type.pointee
                     instr.var_out = add_variable(instr.var_out)
+                elif isinstance(instr, Instruction_store):
+                    instr.var_src = add_variable(instr.var_src)
+                    instr.var_dst = add_variable(instr.var_dst)
+                    if instr.var_dst.type is not None:
+                        assert isinstance(instr.var_dst.type, Pointer)
+                        expected_type = instr.var_dst.type.pointee
+                        if instr.var_src.type is not None and instr.var_src.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for variable '{instr.var_src.name}': {instr.var_src.type} != {expected_type}"
+                            )
+                        instr.var_src.type = expected_type
+                        instr.var_src = add_variable(instr.var_src)
                 elif isinstance(instr, Instruction_hfree):
                     instr.var = add_variable(instr.var)
                 elif isinstance(instr, Instruction_pcast):
@@ -413,12 +480,29 @@ class Resolver:
     def _concrete_struct(self, struct: Derective_struct, types: list[Type]) -> Derective_struct:
         assert len(struct.generics) == len(types)
         generic_mapping = {a.name: b for a, b in zip(struct.generics, types)}
+        concrete_name = struct.get_conrete_name(types)
+        if concrete_name in self.structs:
+            return self.structs[concrete_name]
 
         base = deepcopy(struct)
-        self._rewrite_types(base, generic_mapping)
         base.generics.clear()
-        base.name = base.get_conrete_name(types)
+        base.name = concrete_name
         self.structs[base.name] = base
+        self._rewrite_types(base, generic_mapping)
+        return base
+
+    def _concrete_enum(self, enum: Derective_enum, types: list[Type]) -> Derective_enum:
+        assert len(enum.generics) == len(types)
+        generic_mapping = {a.name: b for a, b in zip(enum.generics, types)}
+        concrete_name = enum.get_conrete_name(types)
+        if concrete_name in self.enums:
+            return self.enums[concrete_name]
+
+        base = deepcopy(enum)
+        base.generics.clear()
+        base.name = concrete_name
+        self.enums[base.name] = base
+        self._rewrite_types(base, generic_mapping)
         return base
 
     def _resolve_struct(self, struct):
@@ -435,6 +519,20 @@ class Resolver:
         struct.generics.clear()
         return struct
 
+    def _resolve_enum(self, enum: Enum) -> Enum:
+        self._rewrite_types(enum, {})
+        target_enum = self.enums.get(enum.name)
+        if target_enum is None or not target_enum.generics:
+            return enum
+
+        concrete_name = target_enum.get_conrete_name(enum.generics)
+        if concrete_name not in self.enums:
+            self._concrete_enum(target_enum, enum.generics)
+
+        enum.name = concrete_name
+        enum.generics.clear()
+        return enum
+
     def _get_struct_params(self, struct_name: str, generics: list[Type]):
         struct = self.structs[struct_name]
         if not struct.generics:
@@ -446,6 +544,57 @@ class Resolver:
         params = deepcopy(struct.params)
         self._rewrite_types(params, {a.name: b for a, b in zip(struct.generics, generics)})
         return params
+
+    def _get_enum_variants(self, enum_name: str, generics: list[Type]):
+        enum = self.enums[enum_name]
+        if not enum.generics:
+            return enum.variants
+
+        variants = deepcopy(enum.variants)
+        self._rewrite_types(variants, {a.name: b for a, b in zip(enum.generics, generics)})
+        return variants
+
+    def _get_composite_params(self, type_name: str, generics: list[Type]) -> list[Parameter]:
+        if type_name in self.structs:
+            return self._get_struct_params(type_name, generics)
+        if type_name in self.enums:
+            params: list[Parameter] = [Parameter(name="tag", type=Usize_t(8))]
+            for variant in self._get_enum_variants(type_name, generics):
+                assert variant.type is not None
+                params.append(Parameter(name=variant.name, type=Pointer(variant.type)))
+            return params
+        raise TypeError(f"Unknown composite type '{type_name}'")
+
+    def _resolve_enum_payload(self, enum: Enum):
+        variants = self._get_enum_variants(enum.name, enum.generics)
+        for variant_index, variant in enumerate(variants):
+            if variant.name != enum.variant:
+                continue
+
+            if enum.payload is None:
+                if variant.type is not None:
+                    raise TypeError(f"Enum variant '{enum.variant}' expects payload")
+                return
+
+            enum.payload = self._resolve_struct(enum.payload)
+            if variant.type is None:
+                raise TypeError(f"Enum variant '{enum.variant}' must not have payload")
+            if enum.payload.as_type() != variant.type:
+                raise TypeError(
+                    f"Type mismatch for enum variant '{enum.variant}': {enum.payload.as_type()} != {variant.type}"
+                )
+
+            struct_params = self._get_struct_params(enum.payload.name, enum.payload.generics)
+            for i, arg in enumerate(enum.payload.args):
+                expected_type = struct_params[i].type
+                if arg.type is not None and arg.type != expected_type:
+                    raise TypeError(
+                        f"Type mismatch for argument {i} of struct '{enum.payload.name}': {arg.type} != {expected_type}"
+                    )
+                arg.type = expected_type
+            return
+
+        raise TypeError(f"Unknown enum variant '{enum.variant}' in '{enum.name}'")
 
     def _resolve_type(self, typ: Type) -> Type:
         return self._replace_type(typ, {})
@@ -475,6 +624,17 @@ class Resolver:
                 self._concrete_struct(target_struct, resolved.generics)
             return Type(concrete_name)
 
+        target_enum = self.enums.get(resolved.name)
+        if (
+            target_enum is not None
+            and target_enum.generics
+            and all(self._is_concrete_type(generic) for generic in resolved.generics)
+        ):
+            concrete_name = target_enum.get_conrete_name(resolved.generics)
+            if concrete_name not in self.enums:
+                self._concrete_enum(target_enum, resolved.generics)
+            return Type(concrete_name)
+
         return resolved
 
     def _is_concrete_type(self, typ: Type) -> bool:
@@ -487,7 +647,12 @@ class Resolver:
         if typ.generics and not all(self._is_concrete_type(generic) for generic in typ.generics):
             return False
 
-        return typ.name in self.structs or not typ.name.isidentifier() or typ.name.startswith("u")
+        return (
+            typ.name in self.structs
+            or typ.name in self.enums
+            or not typ.name.isidentifier()
+            or typ.name.startswith("u")
+        )
 
     def _rewrite_types(self, value, generic_mapping: dict[str, Type]):
         if isinstance(value, Type):

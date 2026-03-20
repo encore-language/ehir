@@ -19,7 +19,7 @@ class Compiler:
         # print(*ast, sep="\n")
 
         ast = self._resolver.run(ast)
-        print(*ast, sep="\n")
+        # print(*ast, sep="\n")
 
         ast = self._normalizer.run(ast)
         # print(*ast, sep="\n")
