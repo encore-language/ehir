@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
 class Type:
     name: str
+    generics: list["Type"] = field(default_factory=list)
 
     def __str__(self) -> str:
-        return self.name
+        generics_repr = ("[" + ", ".join(str(x) for x in self.generics) + "]") if self.generics else ""
+        return f"{self.name}{generics_repr}"
 
     def __hash__(self) -> int:
         return hash(self.name)

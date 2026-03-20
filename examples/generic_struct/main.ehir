@@ -20,12 +20,12 @@ fn main() -> u32 {
     x_1: u32 = lcpos 1_u32
     y_1: u32 = lcpos 2_u32
     z_1: u32 = lcpos 3_u32
-    vec1: Vector3D[u32] = Vector3D[u32](x_1, y_1, z_1)
+    vec1: Vector3D[u32] = lcsos Vector3D[u32](x_1, y_1, z_1)
 
     x_2: u16 = lcpos 3_u16
     y_2: u16 = lcpos 4_u16
     z_2: u16 = lcpos 5_u16
-    vec2: Vector3D[u16] = Vector3D[u16](x_2, y_2, z_2)
+    vec2: Vector3D[u16] = lcsos Vector3D[u16](x_2, y_2, z_2)
 
     br $sum_it
   $sum_it:
