@@ -3,7 +3,13 @@ from ehir.core.derectives import Derective_fn, Derective_struct
 from ehir.core.derectives.base import Derective
 from ehir.core.instructions.base import Assignable, Instruction
 from ehir.core.instructions.capture import Instruction_lcpos
-from ehir.core.instructions.control_flow import Instruction_br, Instruction_cbr, Instruction_ret, Instruction_switch
+from ehir.core.instructions.control_flow import (
+    Instruction_br,
+    Instruction_call,
+    Instruction_cbr,
+    Instruction_ret,
+    Instruction_switch,
+)
 from ehir.core.instructions.control_flow.base import ControlFlow
 from ehir.core.instructions.memory import (
     Instruction_getfield,
@@ -19,7 +25,7 @@ from ehir.core.instructions.operators.arithmetic import (
     Instruction_sub,
 )
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
-from ehir.core.instructions.special import Instruction_call, Instruction_cfree, Instruction_comment
+from ehir.core.instructions.special import Instruction_cfree, Instruction_comment
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.type import Pointer, SmartPointer, Type
 from ehir.core.variable import Parameter, TypedVariable, Variable

@@ -12,11 +12,14 @@ from ehir.core.instructions.capture import (
     Instruction_scsos,
 )
 from ehir.core.instructions.capture.cpos import Instruction_cpos
-from ehir.core.instructions.control_flow import Instruction_phi
-from ehir.core.instructions.control_flow.br import Instruction_br
-from ehir.core.instructions.control_flow.cbr import Instruction_cbr
-from ehir.core.instructions.control_flow.ret import Instruction_ret
-from ehir.core.instructions.control_flow.switch import Instruction_switch
+from ehir.core.instructions.control_flow import (
+    Instruction_br,
+    Instruction_call,
+    Instruction_cbr,
+    Instruction_phi,
+    Instruction_ret,
+    Instruction_switch,
+)
 from ehir.core.instructions.memory import (
     Instruction_getfield,
     Instruction_getfieldptr,
@@ -37,7 +40,6 @@ from ehir.core.instructions.operators.comparison import (
     Instruction_les,
 )
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
-from ehir.core.instructions.special.call import Instruction_call
 from ehir.core.primitives import Usize_t
 from ehir.core.primitives.base import PrimitiveType
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer

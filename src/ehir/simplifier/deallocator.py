@@ -14,6 +14,7 @@ from ehir.core.instructions.capture import (
 )
 from ehir.core.instructions.control_flow import (
     Instruction_br,
+    Instruction_call,
     Instruction_cbr,
     Instruction_phi,
     Instruction_ret,
@@ -33,7 +34,7 @@ from ehir.core.instructions.memory import (
     Instruction_store,
 )
 from ehir.core.instructions.operators.base import BinOp
-from ehir.core.instructions.special import Instruction_call, Instruction_cfree
+from ehir.core.instructions.special import Instruction_cfree
 from ehir.core.type import SmartPointer
 from ehir.core.variable import Variable
 from ehir.simplifier.normalizer.norm_fn import Normalized_fn

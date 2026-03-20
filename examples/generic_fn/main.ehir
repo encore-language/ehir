@@ -4,7 +4,7 @@ fn sum[T](a: T, b: T) -> T {
     ret c
 }
 
-fn main() -> u32
+fn main() -> u32 {
   $entry:
     a_1: u32 = lcpos 1_u32
     b_1: u32 = lcpos 2_u32
