@@ -14,11 +14,14 @@ from ehir.core.instructions.capture import (
     Instruction_scsoh,
     Instruction_scsos,
 )
-from ehir.core.instructions.control_flow.br import Instruction_br
-from ehir.core.instructions.control_flow.cbr import Instruction_cbr
+from ehir.core.instructions.control_flow import (
+    Instruction_br,
+    Instruction_call,
+    Instruction_cbr,
+    Instruction_ret,
+    Instruction_switch,
+)
 from ehir.core.instructions.control_flow.phi import Instruction_phi, PhiPair
-from ehir.core.instructions.control_flow.ret import Instruction_ret
-from ehir.core.instructions.control_flow.switch import Instruction_switch
 from ehir.core.instructions.memory import (
     Instruction_getfield,
     Instruction_getfieldptr,
@@ -45,7 +48,6 @@ from ehir.core.instructions.operators.comparison import (
     Instruction_les,
 )
 from ehir.core.instructions.operators.logic import Instruction_ieq, Instruction_neq
-from ehir.core.instructions.special.call import Instruction_call
 from ehir.core.primitives import Usize, Usize_t
 from ehir.core.primitives.base import Primitive, PrimitiveType
 from ehir.core.struct import Struct
@@ -96,6 +98,8 @@ class Parser:
         self._safe_consume(t.FN)
         name = self._safe_consume(t.IDENTIFIER).string
 
+        generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+
         params = []
         self._safe_consume(t.LEFT_PAREN)
         if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
@@ -116,7 +120,7 @@ class Parser:
             body.append(self._parse_block())
         self._safe_consume(t.RIGHT_BRACE)
 
-        return Derective_fn(name=name, params=params, ret_type=ret_type, body=body)
+        return Derective_fn(name=name, generics=generics, params=params, ret_type=ret_type, body=body)
 
     def _parse_block(self) -> Block:
         name = self._parse_block_label()
@@ -249,6 +253,8 @@ class Parser:
 
         elif isinstance(curr_token, t.CALL):
             fn_name = self._safe_consume(t.IDENTIFIER).string
+            generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+
             args = []
             self._safe_consume(t.LEFT_PAREN)
             if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
@@ -257,7 +263,7 @@ class Parser:
                     self._safe_consume(t.COMMA)
                     args.append(self._parse_variable())
             self._safe_consume(t.RIGHT_PAREN)
-            return Instruction_call(var_out=var, fn_name=fn_name, args=args)
+            return Instruction_call(var_out=var, fn_name=fn_name, generics=generics, args=args)
 
         elif isinstance(curr_token, t.ADD):
             lhs = self._parse_variable()
@@ -439,6 +445,17 @@ class Parser:
 
         return type
 
+    def _parse_generics(self) -> list[Type]:
+        generics = []
+
+        self._safe_consume(t.LEFT_BRACKET)
+        generics.append(self._parse_type())
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACKET):
+            self._safe_consume(t.COMMA)
+            generics.append(self._parse_type())
+        self._safe_consume(t.RIGHT_BRACKET)
+        return generics
+
     def _parse_primitive(self) -> Primitive:
         curr_token = self._consume()
         if isinstance(curr_token, t.NUMBER):
@@ -471,4 +488,4 @@ class Parser:
         return self._consumed + n >= len(self._tokens)
 
     def _trace_unexpected_token(self, token: t.Token, expected_t: type[t.Token]):
-        raise ValueError(f"Unexpected token: {token}")
+        raise ValueError(f"Unexpected token: {token}. Expected: {expected_t}")
