@@ -1,0 +1,142 @@
+struct Vector3D[T] {
+    x: T
+    y: T
+    z: T
+}
+
+trait Vector[T] where T: Add + Sub + Mul + Div {
+    fn get_vector_norm(vec: Vector3D[T]) -> T
+    fn get_sum_of_coords(vec: Vector3D[T]) -> T
+}
+
+impl[T] Add for Vector3D[T] where T: Add {
+    fn add(lhs: Vector3D[T], rhs: Vector3D[T]) -> Vector3D[T] {
+      $entry:
+        x_l = getfield lhs, x
+        y_l = getfield lhs, y
+        z_l = getfield lhs, z
+
+        x_r = getfield rhs, x
+        y_r = getfield rhs, y
+        z_r = getfield rhs, z
+
+        x = add x_l, x_r
+        y = add y_l, y_r
+        z = add z_l, z_r
+
+        out: Vector3D[T] = lcsos Vector3D[T](x, y, z)
+        ret out
+    }
+}
+
+impl[T] Sub for Vector3D[T] where T: Sub {
+    fn sub(lhs: Vector3D[T], rhs: Vector3D[T]) -> Vector3D[T] {
+      $entry:
+        x_l = getfield lhs, x
+        y_l = getfield lhs, y
+        z_l = getfield lhs, z
+
+        x_r = getfield rhs, x
+        y_r = getfield rhs, y
+        z_r = getfield rhs, z
+
+        x = sub x_l, x_r
+        y = sub y_l, y_r
+        z = sub z_l, z_r
+
+        out: Vector3D[T] = lcsos Vector3D[T](x, y, z)
+        ret out
+    }
+}
+
+impl[T] Mul for Vector3D[T] where T: Mul {
+    fn mul(lhs: Vector3D[T], rhs: Vector3D[T]) -> Vector3D[T] {
+      $entry:
+        x_l = getfield lhs, x
+        y_l = getfield lhs, y
+        z_l = getfield lhs, z
+
+        x_r = getfield rhs, x
+        y_r = getfield rhs, y
+        z_r = getfield rhs, z
+
+        x = mul x_l, x_r
+        y = mul y_l, y_r
+        z = mul z_l, z_r
+
+        out: Vector3D[T] = lcsos Vector3D[T](x, y, z)
+        ret out
+    }
+}
+
+impl[T] Div for Vector3D[T] where T: Div {
+    fn div(lhs: Vector3D[T], rhs: Vector3D[T]) -> Vector3D[T] {
+      $entry:
+        x_l = getfield lhs, x
+        y_l = getfield lhs, y
+        z_l = getfield lhs, z
+
+        x_r = getfield rhs, x
+        y_r = getfield rhs, y
+        z_r = getfield rhs, z
+
+        x = div x_l, x_r
+        y = div y_l, y_r
+        z = div z_l, z_r
+
+        out: Vector3D[T] = lcsos Vector3D[T](x, y, z)
+        ret out
+    }
+}
+
+impl[T] Vector[T] for Vector3D[T] where T: Add + Mul {
+    fn get_vector_norm(vec: Vector3D[T]) -> T {
+      $entry:
+        x = getfield vec, x
+        y = getfield vec, y
+        z = getfield vec, z
+
+        xx = mul x, x
+        yy = mul y, y
+        zz = mul z, z
+
+        xy = add xx, yy
+        xyz = add xy, zz
+        ret xyz
+    }
+
+    fn get_sum_of_coords(vec: Vector3D[T]) -> T {
+      $entry:
+        x = getfield vec, x
+        y = getfield vec, y
+        z = getfield vec, z
+
+        xy = add x, y
+        xyz = add xy, z
+        ret xyz
+    }
+}
+
+fn main() -> u32 {
+  $entry:
+    x_1: u32 = lcpos 10_u32
+    y_1: u32 = lcpos 20_u32
+    z_1: u32 = lcpos 30_u32
+    v1: Vector3D[u32] = lcsos Vector3D[u32](x_1, y_1, z_1)
+
+    x_2: u32 = lcpos 2_u32
+    y_2: u32 = lcpos 4_u32
+    z_2: u32 = lcpos 5_u32
+    v2: Vector3D[u32] = lcsos Vector3D[u32](x_2, y_2, z_2)
+
+    v_add = add v1, v2
+    v_sub = sub v_add, v1
+    v_mul = mul v_sub, v2
+    v_div = div v_mul, v2
+
+    norm = call Vector::get_vector_norm[u32](v_div)
+    sum = call Vector::get_sum_of_coords[u32](v_div)
+
+    out = add norm, sum
+    ret out
+}

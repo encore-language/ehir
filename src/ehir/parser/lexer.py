@@ -125,6 +125,14 @@ class Lexer:
                 self._append_token(t.STRUCT)
             case "enum":
                 self._append_token(t.ENUM)
+            case "trait":
+                self._append_token(t.TRAIT)
+            case "impl":
+                self._append_token(t.IMPL)
+            case "for":
+                self._append_token(t.FOR)
+            case "where":
+                self._append_token(t.WHERE)
             case "ceoh":
                 self._append_token(t.CEOH)
             case "ceos":

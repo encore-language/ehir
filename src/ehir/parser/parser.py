@@ -1,5 +1,12 @@
 from ehir.core.block import Block
-from ehir.core.derectives import Derective_enum, Derective_fn, Derective_struct
+from ehir.core.derectives import (
+    Derective_enum,
+    Derective_fn,
+    Derective_impl,
+    Derective_struct,
+    Derective_trait,
+    TraitMethod,
+)
 from ehir.core.derectives.base import Derective
 from ehir.core.enum import Enum, EnumVariant
 from ehir.core.instructions.base import Instruction
@@ -80,6 +87,10 @@ class Parser:
 
             if isinstance(current_token, t.FN):
                 self._ast.append(self._parse_fn())
+            elif isinstance(current_token, t.TRAIT):
+                self._ast.append(self._parse_trait())
+            elif isinstance(current_token, t.IMPL):
+                self._ast.append(self._parse_impl())
             elif isinstance(current_token, t.ENUM):
                 self._ast.append(self._parse_enum())
             elif isinstance(current_token, t.STRUCT):
@@ -88,6 +99,47 @@ class Parser:
                 raise ValueError(f"Unexpected token {current_token}")
 
         return self._ast
+
+    def _parse_trait(self) -> Derective_trait:
+        self._safe_consume(t.TRAIT)
+        name = self._parse_name()
+        generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+        bounds = self._parse_bounds() if isinstance(self._lookup_curr(), t.WHERE) else {}
+
+        methods: list[TraitMethod] = []
+        self._safe_consume(t.LEFT_BRACE)
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
+            method = self._parse_fn_decl(with_body=False)
+            methods.append(
+                TraitMethod(name=method.name, generics=method.generics, params=method.params, ret_type=method.ret_type)
+            )
+        self._safe_consume(t.RIGHT_BRACE)
+
+        return Derective_trait(name=name, generics=generics, bounds=bounds, methods=methods)
+
+    def _parse_impl(self) -> Derective_impl:
+        self._safe_consume(t.IMPL)
+        generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+        trait_name = self._parse_name()
+        trait_args = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
+        self._safe_consume(t.FOR)
+        for_type = self._parse_type()
+        bounds = self._parse_bounds() if isinstance(self._lookup_curr(), t.WHERE) else {}
+
+        methods: list[Derective_fn] = []
+        self._safe_consume(t.LEFT_BRACE)
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
+            methods.append(self._parse_fn_decl(with_body=True))
+        self._safe_consume(t.RIGHT_BRACE)
+
+        return Derective_impl(
+            trait_name=trait_name,
+            trait_args=trait_args,
+            for_type=for_type,
+            generics=generics,
+            bounds=bounds,
+            methods=methods,
+        )
 
     def _parse_enum(self) -> Derective_enum:
         self._safe_consume(t.ENUM)
@@ -125,16 +177,17 @@ class Parser:
         return Derective_struct(name=name, generics=generics, params=params)
 
     def _parse_fn(self) -> Derective_fn:
-        self._safe_consume(t.FN)
-        name = self._safe_consume(t.IDENTIFIER).string
+        return self._parse_fn_decl(with_body=True)
 
+    def _parse_fn_decl(self, with_body: bool) -> Derective_fn:
+        self._safe_consume(t.FN)
+        name = self._parse_name()
         generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
 
         params = []
         self._safe_consume(t.LEFT_PAREN)
         if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
             params.append(self._parse_param())
-
             while not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
                 self._safe_consume(t.COMMA)
                 params.append(self._parse_param())
@@ -143,13 +196,12 @@ class Parser:
         self._safe_consume(t.ARROW)
         ret_type = self._parse_type()
 
-        self._safe_consume(t.LEFT_BRACE)
-
         body = []
-        while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
-            body.append(self._parse_block())
-        self._safe_consume(t.RIGHT_BRACE)
-
+        if with_body:
+            self._safe_consume(t.LEFT_BRACE)
+            while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
+                body.append(self._parse_block())
+            self._safe_consume(t.RIGHT_BRACE)
         return Derective_fn(name=name, generics=generics, params=params, ret_type=ret_type, body=body)
 
     def _parse_block(self) -> Block:
@@ -303,7 +355,11 @@ class Parser:
             return Instruction_lcsos(var_out=var, struct=struct)
 
         elif isinstance(curr_token, t.CALL):
-            fn_name = self._safe_consume(t.IDENTIFIER).string
+            fn_name = self._parse_name()
+            if isinstance(self._lookup_curr(), t.DOUBLE_COLON):
+                self._safe_consume(t.DOUBLE_COLON)
+                method = self._parse_name()
+                fn_name = f"{fn_name}::{method}"
             generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
 
             args = []
@@ -519,6 +575,29 @@ class Parser:
             generics.append(self._parse_type())
         self._safe_consume(t.RIGHT_BRACKET)
         return generics
+
+    def _parse_bounds(self) -> dict[str, list[str]]:
+        bounds: dict[str, list[str]] = {}
+        self._safe_consume(t.WHERE)
+        while True:
+            generic_name = self._parse_name()
+            self._safe_consume(t.COLON)
+            traits = [self._parse_name()]
+            while isinstance(self._lookup_curr(), t.PLUS):
+                self._safe_consume(t.PLUS)
+                traits.append(self._parse_name())
+            bounds[generic_name] = traits
+            if not isinstance(self._lookup_curr(), t.COMMA):
+                break
+            self._safe_consume(t.COMMA)
+        return bounds
+
+    def _parse_name(self) -> str:
+        token = self._consume()
+        if isinstance(token, (t.IDENTIFIER, t.ADD, t.SUB, t.MUL, t.DIV, t.LES, t.LEQ, t.GRT, t.GEQ, t.IEQ, t.NEQ)):
+            return token.string
+        self._trace_unexpected_token(token, t.IDENTIFIER)
+        raise AssertionError("Unreachable")
 
     def _parse_primitive(self) -> Primitive:
         curr_token = self._consume()
