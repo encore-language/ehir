@@ -18,7 +18,12 @@ class Lexer:
     _ignored: tuple[type[t.Token], ...] = (t.WHITESPACE, t.NEWLINE)
 
     def tokenize(self, source_code: str) -> list[t.Token]:
+        self._tokens.clear()
         self._program = source_code
+        self._column = 0
+        self._line = 0
+        self._consumed = 0
+        self._string = ""
         unknown_tokens: list[t.Token] = []
 
         while not self._is_at_end():
@@ -129,6 +134,12 @@ class Lexer:
                 self._append_token(t.TRAIT)
             case "impl":
                 self._append_token(t.IMPL)
+            case "pub":
+                self._append_token(t.PUB)
+            case "imp":
+                self._append_token(t.IMP)
+            case "cimp":
+                self._append_token(t.CIMP)
             case "for":
                 self._append_token(t.FOR)
             case "where":

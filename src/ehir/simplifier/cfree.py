@@ -465,7 +465,7 @@ class Cfree_Simplifier_Pass:
             ),
         )
 
-        derective = Normalized_fn(
+        derective = Normalized_fn.new(
             name=name,
             params=[self_param, mode_param],
             ret_type=Usize_t(),

@@ -17,12 +17,8 @@ def main():
         print(f"Error: File '{program_path}' does not exist.")
         exit(-1)
 
-    with program_path.open("r") as f:
-        source_code = f.read()
-        name = program_path.stem
-
     compiler = Compiler()
-    compiler.compile(source_code, name)
+    compiler.compile_file(program_path)
 
 
 if __name__ == "__main__":

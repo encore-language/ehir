@@ -1,0 +1,5 @@
+pub fn sum_u32(lhs: u32, rhs: u32) -> u32 {
+$entry:
+  out: u32 = add lhs, rhs
+  ret out
+}

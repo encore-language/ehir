@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ehir.core.block import Block, TerminatedBlock
 from ehir.core.derectives import Derective_fn
