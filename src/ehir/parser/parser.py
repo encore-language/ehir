@@ -1,9 +1,10 @@
 from ehir.core.block import Block
 from ehir.core.derectives import (
+    Derective_cimp,
     Derective_enum,
     Derective_fn,
+    Derective_imp,
     Derective_impl,
-    Derective_import,
     Derective_struct,
     Derective_trait,
     TraitMethod,
@@ -100,18 +101,15 @@ class Parser:
             elif isinstance(current_token, t.IMPL):
                 derective = self._parse_impl()
             elif isinstance(current_token, t.IMP):
-                derective = self._parse_import(is_cross=False)
+                derective = self._parse_imp()
             elif isinstance(current_token, t.CIMP):
-                derective = self._parse_import(is_cross=True)
+                derective = self._parse_cimp()
             elif isinstance(current_token, t.ENUM):
                 derective = self._parse_enum()
             elif isinstance(current_token, t.STRUCT):
                 derective = self._parse_struct()
             else:
                 raise ValueError(f"Unexpected token {current_token}")
-
-            if is_public and isinstance(derective, Derective_import):
-                raise ValueError("Import derective can not be marked as pub. Use cimp for re-export.")
 
             self._mark_visibility(derective, is_public)
             self._ast.append(derective)
@@ -122,12 +120,10 @@ class Parser:
         if isinstance(derective, Derective_impl):
             setattr(derective, "is_public", True)
             return
-        if isinstance(derective, Derective_import):
-            return
         setattr(derective, "is_public", is_public)
 
-    def _parse_import(self, is_cross: bool) -> Derective_import:
-        self._safe_consume(t.CIMP if is_cross else t.IMP)
+    def _parse_cimp(self) -> Derective_cimp:
+        self._safe_consume(t.CIMP)
         parts = [self._safe_consume(t.IDENTIFIER).string]
         while isinstance(self._lookup_curr(), t.DOUBLE_COLON):
             self._safe_consume(t.DOUBLE_COLON)
@@ -138,7 +134,21 @@ class Parser:
 
         if len(parts) < 2:
             raise ValueError("Import must have module path and symbol: imp path::to::symbol")
-        return Derective_import(is_cross=is_cross, module_path=parts[:-1], symbol=parts[-1])
+        return Derective_cimp(prefix=parts[:-1], symbol=parts[-1])
+
+    def _parse_imp(self) -> Derective_imp:
+        self._safe_consume(t.IMP)
+        parts = [self._safe_consume(t.IDENTIFIER).string]
+        while isinstance(self._lookup_curr(), t.DOUBLE_COLON):
+            self._safe_consume(t.DOUBLE_COLON)
+            parts.append(self._safe_consume(t.IDENTIFIER).string)
+
+        if isinstance(self._lookup_curr(), t.SEMICOLON):
+            self._safe_consume(t.SEMICOLON)
+
+        if len(parts) < 2:
+            raise ValueError("Import must have module path and symbol: imp path::to::symbol")
+        return Derective_imp(prefix=parts[:-1], symbol=parts[-1])
 
     def _parse_trait(self) -> Derective_trait:
         self._safe_consume(t.TRAIT)
