@@ -3,10 +3,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ehir.core.derectives import (
+    Derective_cimp,
     Derective_enum,
     Derective_fn,
+    Derective_imp,
     Derective_impl,
-    Derective_import,
     Derective_struct,
     Derective_trait,
 )
@@ -46,7 +47,7 @@ def _merge_impls(target: list[Derective_impl], source: list[Derective_impl]):
 
 @dataclass
 class _ImportEdge:
-    derective: Derective_import
+    derective: Derective_imp | Derective_cimp
     path: Path
 
 
@@ -115,7 +116,7 @@ class ProjectTree:
                     f"'{edge.path}'. Use pub/cimp in the source module."
                 )
 
-            if edge.derective.is_cross:
+            if isinstance(edge.derective, Derective_cimp):
                 imported_symbol = dep_node.exported_symbols[imported_symbol_name]
                 existing = exported_symbols.get(imported_symbol_name)
                 if existing is not None and existing is not imported_symbol:
@@ -141,8 +142,8 @@ class ProjectTree:
         self._loading_stack.append(module_path)
         source_code = module_path.read_text(encoding="utf-8")
         ast = self._parser.parse(source_code)
-        imports = [d for d in ast if isinstance(d, Derective_import)]
-        local_derectives = [d for d in ast if not isinstance(d, Derective_import)]
+        imports = [d for d in ast if isinstance(d, (Derective_cimp, Derective_imp))]
+        local_derectives = [d for d in ast if not isinstance(d, (Derective_cimp, Derective_imp))]
         local_symbols: dict[str, Derective] = {}
         local_impls: list[Derective_impl] = []
 
@@ -172,8 +173,8 @@ class ProjectTree:
 
         self._loading_stack.pop()
 
-    def _resolve_import_file(self, imp: Derective_import, importer_file: Path) -> Path:
-        module_rel = Path(*imp.module_path)
+    def _resolve_import_file(self, imp: Derective_cimp | Derective_imp, importer_file: Path) -> Path:
+        module_rel = Path(*imp.prefix)
         search_roots = [importer_file.parent, self._project_root, self._workspace_root, self._std_root]
 
         unique_roots: list[Path] = []
@@ -197,7 +198,7 @@ class ProjectTree:
 
         candidates_repr = "\n".join(f" - {candidate}" for candidate in candidates)
         raise FileNotFoundError(
-            f"Could not resolve import module path '{'::'.join(imp.module_path)}' "
+            f"Could not resolve import module path '{'::'.join(imp.prefix)}' "
             f"for symbol '{imp.symbol}' in '{importer_file}'.\nCandidates:\n{candidates_repr}"
         )
 
@@ -214,7 +215,7 @@ class Compiler:
 
     def compile(self, source_code: str, name: str) -> ProcessedModule:
         ast = self._parser.parse(source_code)
-        ast = [derective for derective in ast if not isinstance(derective, Derective_import)]
+        ast = [derective for derective in ast if not isinstance(derective, (Derective_cimp, Derective_imp))]
         return self._compile_ast(ast, name)
 
     def compile_file(self, input_file: Path) -> ProcessedModule:
