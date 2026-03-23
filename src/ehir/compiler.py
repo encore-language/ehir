@@ -75,18 +75,23 @@ class EHIR_ProjectCompiler:
             node.dependencies.add(parent_id)
             parent_node = self._compile_node_by_id(parent_id)
 
-            for parent_derective in parent_node.module.ast:
-                if isinstance(parent_derective, Derective_import):
-                    continue
-
-                elif (
-                    isinstance(parent_derective, (Derective_fn, Derective_struct, Derective_enum))
-                    and parent_derective.name == derective.symbol
-                ):
+            if derective.symbol == "*":
+                for parent_derective in parent_node.module.ast:
+                    if not isinstance(parent_derective, Derective_import):
+                        continue
                     filtered_ast.append(parent_derective)
-                    break
             else:
-                raise RuntimeError(f"Unable to import: {derective}")
+                for parent_derective in parent_node.module.ast:
+                    if isinstance(parent_derective, Derective_import):
+                        continue
+
+                    elif isinstance(parent_derective, (Derective_fn, Derective_struct, Derective_enum)) and (
+                        parent_derective.name == derective.symbol or derective.symbol == "*"
+                    ):
+                        filtered_ast.append(parent_derective)
+                        break
+                else:
+                    raise RuntimeError(f"Unable to import: {derective}")
 
         module.ast = filtered_ast
         return node
