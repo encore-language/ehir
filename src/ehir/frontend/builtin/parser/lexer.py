@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass, field
 
-import ehir.parser.tokens as t
+import ehir.frontend.builtin.parser.tokens as t
 from ehir.format import ThemePalette, printfmt
 
 TRACE_MAX_LINES_FOR_UNIT = 5

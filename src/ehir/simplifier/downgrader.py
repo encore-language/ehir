@@ -81,7 +81,7 @@ class Downgrader:
     _fns: dict[str, Normalized_fn]
     _fns_to_add: list[Normalized_fn]
 
-    def run(self, ast: list[Derective]):
+    def run(self, ast: list[Derective]) -> list[Derective]:
         self._structs = {}
         self._structs_to_add = []
         self._fns = {}
@@ -107,6 +107,7 @@ class Downgrader:
                 self._downgrade_function(derective)
 
         ast[:] = rewritten_ast + self._structs_to_add + self._fns_to_add
+        return ast
 
     def _downgrade_function(self, fn: Normalized_fn):
         for block in fn.get_body():
