@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from ehir.builder import EHIR_Module
 from ehir.core.derectives import Derective_import
 
 
+@dataclass
 class EHIR_Frontend(ABC):
     @abstractmethod
     def get_module_by_id(self, id: str) -> EHIR_Module:
