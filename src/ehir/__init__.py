@@ -1,8 +1,7 @@
-from .backend import EHIR_Backend, OptProfile
-from .compiler import Compiler
+from .backend import EHIR_Backend
+from .frontend import EHIR_Frontend
 
 __all__ = [
-    "Compiler",
+    "EHIR_Frontend",
     "EHIR_Backend",
-    "OptProfile",
 ]

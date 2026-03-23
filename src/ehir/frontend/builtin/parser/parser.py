@@ -67,8 +67,8 @@ from ehir.core.primitives.base import Primitive, PrimitiveType
 from ehir.core.struct import Struct
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
 from ehir.core.variable import Parameter, Variable
-from ehir.parser import tokens as t
-from ehir.parser.lexer import Lexer
+from ehir.frontend.builtin.parser import tokens as t
+from ehir.frontend.builtin.parser.lexer import Lexer
 
 
 class Parser:

@@ -62,10 +62,11 @@ class Deallocator:
     _curr_block: str
     _variables: dict[str, Variable]
 
-    def run(self, ast: list[Derective]):
+    def run(self, ast: list[Derective]) -> list[Derective]:
         for derective in ast:
             if isinstance(derective, Normalized_fn):
                 self._place_cfree(derective)
+        return ast
 
     def _place_cfree(self, fn: Normalized_fn):
         self._usages = {}

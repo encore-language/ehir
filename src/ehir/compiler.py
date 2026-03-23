@@ -1,233 +1,92 @@
-from copy import deepcopy
 from dataclasses import dataclass, field
+from enum import StrEnum, auto
 from pathlib import Path
 
-from ehir.core.derectives import (
-    Derective_cimp,
-    Derective_enum,
-    Derective_fn,
-    Derective_imp,
-    Derective_impl,
-    Derective_struct,
-    Derective_trait,
-)
-from ehir.core.derectives.base import Derective
-from ehir.parser.parser import Parser
-from ehir.postprocessor import Postprocessor, ProcessedModule
+from ehir.backend import EHIR_Backend
+from ehir.builder import EHIR_Module
+from ehir.core.derectives import Derective_enum, Derective_fn, Derective_import, Derective_struct
+from ehir.format import ThemePalette, printfmt
+from ehir.frontend import EHIR_Frontend
+from ehir.postprocessor import Postprocessor
 from ehir.simplifier import Deallocator, Downgrader, Normalizer, Resolver
 from ehir.simplifier.cfree import Cfree_Simplifier_Pass
 
 
-def _derective_symbol_name(derective: Derective) -> str | None:
-    if isinstance(derective, (Derective_fn, Derective_struct, Derective_enum, Derective_trait)):
-        return derective.name
-    return None
+@dataclass
+class Target:
+    class TargetType(StrEnum):
+        BINARY = auto()
+        RAW = auto()
 
-
-def _is_public_derective(derective: Derective) -> bool:
-    if isinstance(derective, Derective_impl):
-        return True
-    return bool(getattr(derective, "is_public", False))
-
-
-def _impl_key(derective: Derective_impl) -> str:
-    methods_repr = ",".join(method.name for method in derective.methods)
-    return f"{derective.trait_name}|{derective.for_type}|{methods_repr}"
-
-
-def _merge_impls(target: list[Derective_impl], source: list[Derective_impl]):
-    seen = {_impl_key(impl) for impl in target}
-    for impl in source:
-        key = _impl_key(impl)
-        if key in seen:
-            continue
-        target.append(impl)
-        seen.add(key)
+    module_id: str
+    type: TargetType = TargetType.BINARY
 
 
 @dataclass
-class _ImportEdge:
-    derective: Derective_imp | Derective_cimp
-    path: Path
+class TreeNode:
+    module: EHIR_Module
+    dependencies: set[str] = field(default_factory=set)
 
 
 @dataclass
-class _ProjectNode:
-    path: Path
-    local_derectives: list[Derective]
-    local_symbols: dict[str, Derective]
-    local_impls: list[Derective_impl]
-    imports: list[_ImportEdge] = field(default_factory=list)
-    exported_symbols: dict[str, Derective] = field(default_factory=dict)
-    exported_impls: list[Derective_impl] = field(default_factory=list)
+class EHIR_ProjectCompiler:
+    frontend: EHIR_Frontend
+    backend: EHIR_Backend
+    targets: dict[str, Target] = field(default_factory=dict)
+    tree: dict[str, TreeNode] = field(default_factory=dict)
 
-
-class ProjectTree:
-    def __init__(self, entry_file: Path, parser: Parser):
-        self.entry_file = entry_file.resolve()
-        self._parser = parser
-        self._nodes: dict[Path, _ProjectNode] = {}
-        self._loading_stack: list[Path] = []
-        self._project_root = self.entry_file.parent.resolve()
-        self._workspace_root = Path(__file__).resolve().parents[2]
-        self._std_root = self._workspace_root / "std"
-
-    def build_flat_ast(self) -> list[Derective]:
-        self._load_module(self.entry_file)
-        order = self._build_topological_order(self.entry_file)
-        for path in order:
-            self._resolve_exports(self._nodes[path])
-
-        # Keep compilation order deterministic: dependencies first.
-        flat_ast: list[Derective] = []
-        for path in order:
-            flat_ast.extend(deepcopy(self._nodes[path].local_derectives))
-        return flat_ast
-
-    def _build_topological_order(self, start: Path) -> list[Path]:
-        visited: set[Path] = set()
-        order: list[Path] = []
-
-        def visit(path: Path):
-            if path in visited:
-                return
-            visited.add(path)
-            node = self._nodes[path]
-            for edge in node.imports:
-                visit(edge.path)
-            order.append(path)
-
-        visit(start)
-        return order
-
-    def _resolve_exports(self, node: _ProjectNode):
-        exported_symbols: dict[str, Derective] = {
-            name: derective for name, derective in node.local_symbols.items() if _is_public_derective(derective)
-        }
-        exported_impls: list[Derective_impl] = list(node.local_impls)
-
-        for edge in node.imports:
-            dep_node = self._nodes[edge.path]
-            imported_symbol_name = edge.derective.symbol
-
-            if imported_symbol_name not in dep_node.exported_symbols:
-                raise ValueError(
-                    f"Symbol '{imported_symbol_name}' is not public in module "
-                    f"'{edge.path}'. Use pub/cimp in the source module."
-                )
-
-            if isinstance(edge.derective, Derective_cimp):
-                imported_symbol = dep_node.exported_symbols[imported_symbol_name]
-                existing = exported_symbols.get(imported_symbol_name)
-                if existing is not None and existing is not imported_symbol:
-                    raise ValueError(
-                        f"Export conflict in module '{node.path}': symbol '{imported_symbol_name}' is already defined."
-                    )
-                exported_symbols[imported_symbol_name] = imported_symbol
-                _merge_impls(exported_impls, dep_node.exported_impls)
-
-        node.exported_symbols = exported_symbols
-        node.exported_impls = exported_impls
-
-    def _load_module(self, module_path: Path):
-        module_path = module_path.resolve()
-        if module_path in self._nodes:
+    def add_target_to_build(self, target: Target):
+        if target.module_id in self.targets:
             return
-        if module_path in self._loading_stack:
-            cycle = " -> ".join(str(path) for path in [*self._loading_stack, module_path])
-            raise ValueError(f"Import cycle detected: {cycle}")
-        if not module_path.exists():
-            raise FileNotFoundError(f"Imported module does not exist: {module_path}")
+        self.targets[target.module_id] = target
 
-        self._loading_stack.append(module_path)
-        source_code = module_path.read_text(encoding="utf-8")
-        ast = self._parser.parse(source_code)
-        imports = [d for d in ast if isinstance(d, (Derective_cimp, Derective_imp))]
-        local_derectives = [d for d in ast if not isinstance(d, (Derective_cimp, Derective_imp))]
-        local_symbols: dict[str, Derective] = {}
-        local_impls: list[Derective_impl] = []
+    def compile_all_targets(self) -> list[tuple[str, Path]]:
+        result = []
+        for target_name, target in self.targets.items():
+            printfmt(f"[{target_name}] Compiling...\n", style=ThemePalette.ACCENT_TEXT)
+            node = self._compile_node_by_id(target.module_id)
 
-        for derective in local_derectives:
-            if isinstance(derective, Derective_impl):
-                local_impls.append(derective)
+            node.module.ast = Resolver().run(node.module.ast)
+            node.module.ast = Normalizer().run(node.module.ast)
+            node.module.ast = Deallocator().run(node.module.ast)
+            node.module.ast = Cfree_Simplifier_Pass().run(node.module.ast)
+            node.module.ast = Downgrader().run(node.module.ast)
+            processed_mod = Postprocessor().run(node.module)
+
+            artifact_path = self.backend.compile_module(processed_mod)
+            result.append((target_name, artifact_path))
+        return result
+
+    def _compile_node_by_id(self, id: str) -> TreeNode:
+        if node := self.tree.get(id):
+            return node
+
+        module = self.frontend.get_module_by_id(id=id)
+        node = TreeNode(module)
+        self.tree[module.id] = node
+
+        filtered_ast = []
+        for derective in module.ast:
+            if not isinstance(derective, Derective_import):
+                filtered_ast.append(derective)
                 continue
-            symbol_name = _derective_symbol_name(derective)
-            if symbol_name is None:
-                continue
-            if symbol_name in local_symbols:
-                raise ValueError(f"Duplicate symbol '{symbol_name}' in file '{module_path}'.")
-            local_symbols[symbol_name] = derective
 
-        node = _ProjectNode(
-            path=module_path,
-            local_derectives=local_derectives,
-            local_symbols=local_symbols,
-            local_impls=local_impls,
-        )
-        self._nodes[module_path] = node
+            parent_id = self.frontend.get_parent_id_of(id, derective)
+            node.dependencies.add(parent_id)
+            parent_node = self._compile_node_by_id(parent_id)
 
-        for import_derective in imports:
-            dep_path = self._resolve_import_file(import_derective, module_path)
-            node.imports.append(_ImportEdge(derective=import_derective, path=dep_path))
-            self._load_module(dep_path)
+            for parent_derective in parent_node.module.ast:
+                if isinstance(parent_derective, Derective_import):
+                    continue
 
-        self._loading_stack.pop()
+                elif (
+                    isinstance(parent_derective, (Derective_fn, Derective_struct, Derective_enum))
+                    and parent_derective.name == derective.symbol
+                ):
+                    filtered_ast.append(parent_derective)
+                    break
+            else:
+                raise RuntimeError(f"Unable to import: {derective}")
 
-    def _resolve_import_file(self, imp: Derective_cimp | Derective_imp, importer_file: Path) -> Path:
-        module_rel = Path(*imp.prefix)
-        search_roots = [importer_file.parent, self._project_root, self._workspace_root, self._std_root]
-
-        unique_roots: list[Path] = []
-        seen_roots: set[Path] = set()
-        for root in search_roots:
-            root = root.resolve()
-            if root in seen_roots:
-                continue
-            seen_roots.add(root)
-            unique_roots.append(root)
-
-        candidates: list[Path] = []
-        for root in unique_roots:
-            module_file = root.joinpath(*module_rel.parts).with_suffix(".ehir")
-            module_main = root.joinpath(*module_rel.parts) / "main.ehir"
-            candidates.extend([module_file, module_main])
-
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate.resolve()
-
-        candidates_repr = "\n".join(f" - {candidate}" for candidate in candidates)
-        raise FileNotFoundError(
-            f"Could not resolve import module path '{'::'.join(imp.prefix)}' "
-            f"for symbol '{imp.symbol}' in '{importer_file}'.\nCandidates:\n{candidates_repr}"
-        )
-
-
-class Compiler:
-    def __init__(self):
-        self._parser = Parser()
-        self._resolver = Resolver()
-        self._normalizer = Normalizer()
-        self._deallocator = Deallocator()
-        self._cfree_pass = Cfree_Simplifier_Pass()
-        self._downgrader = Downgrader()
-        self._postprocessor = Postprocessor()
-
-    def compile(self, source_code: str, name: str) -> ProcessedModule:
-        ast = self._parser.parse(source_code)
-        ast = [derective for derective in ast if not isinstance(derective, (Derective_cimp, Derective_imp))]
-        return self._compile_ast(ast, name)
-
-    def compile_file(self, input_file: Path) -> ProcessedModule:
-        input_file = input_file.resolve()
-        tree = ProjectTree(entry_file=input_file, parser=self._parser)
-        ast = tree.build_flat_ast()
-        return self._compile_ast(ast, input_file.stem)
-
-    def _compile_ast(self, ast: list[Derective], name: str) -> ProcessedModule:
-        ast = self._resolver.run(ast)
-        ast = self._normalizer.run(ast)
-        self._deallocator.run(ast)
-        ast = self._cfree_pass.run(ast)
-        self._downgrader.run(ast)
-        return self._postprocessor.run(ast, name)
+        module.ast = filtered_ast
+        return node

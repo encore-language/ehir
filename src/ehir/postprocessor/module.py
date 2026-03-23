@@ -6,7 +6,7 @@ from ehir.simplifier.normalizer.norm_fn import Normalized_fn
 
 @dataclass
 class ProcessedModule:
-    name: str
+    id: str
     structs: list[Derective_struct]
     funcs: list[Normalized_fn]
 
