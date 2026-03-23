@@ -1,30 +1,31 @@
-from argparse import ArgumentParser
 from pathlib import Path
 
 from ehir.backend.builtin import EHIR_DirectBackend
-from ehir.compiler import EHIR_ProjectCompiler, Target
+from ehir.compiler import EHIR_ProjectCompiler, Refrain
 from ehir.frontend.builtin import EHIR_DirectFrontend
 
 
 def main():
-    parser = ArgumentParser(prog="ehir", description="EHIR Compiler")
-    parser.add_argument("input_file", help="Path to the input file")
-    args = parser.parse_args()
-
-    program_path = Path(args.input_file)
-    if not program_path.is_absolute():
-        program_path = Path().resolve() / program_path
-
-    if not program_path.exists():
-        print(f"Error: File '{program_path}' does not exist.")
-        exit(-1)
+    cwd = Path().resolve()
+    target_path = cwd / "path"
+    refrains_path = cwd / "refrains"
 
     compiler = EHIR_ProjectCompiler(
         frontend=EHIR_DirectFrontend(),
-        backend=EHIR_DirectBackend(),
+        backend=EHIR_DirectBackend(target_dir=target_path),
     )
-    compiler.add_target_to_build(Target(module_id=program_path.__str__(), type=Target.TargetType.BINARY))
-    compiler.compile_all_targets()
+
+    for refrain in refrains_path.iterdir():
+        compiler.add_refrain_to_build(
+            Refrain(
+                name=refrain.name,
+                path=refrain,
+                type=Refrain.TargetType.LIBRARY,
+            )
+        )
+
+    compiler.add_refrain_to_build(Refrain(name=cwd.name, path=cwd, type=Refrain.TargetType.BINARY))
+    compiler.compile_all()
 
 
 if __name__ == "__main__":
