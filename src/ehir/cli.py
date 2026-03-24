@@ -7,7 +7,7 @@ from ehir.frontend.builtin import EHIR_DirectFrontend
 
 def main():
     cwd = Path().resolve()
-    target_path = cwd / "path"
+    target_path = cwd / "target"
     refrains_path = cwd / "refrains"
 
     compiler = EHIR_ProjectCompiler(

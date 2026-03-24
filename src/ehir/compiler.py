@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum, auto
 from pathlib import Path
@@ -44,7 +45,8 @@ class EHIR_ProjectCompiler:
     def compile_all(self) -> list[tuple[str, Path]]:
         result = []
         for refrain in self.refrains.values():
-            self._compile_refrain(refrain)
+            mod = self._compile_refrain(refrain)
+            self.backend.compile_module(mod, name=refrain.name)
         return result
 
     def _compile_refrain(self, refrain: Refrain) -> ProcessedModule:
@@ -52,13 +54,17 @@ class EHIR_ProjectCompiler:
 
         suffix = ("lib" if refrain.type == Refrain.TargetType.LIBRARY else "main") + self.frontend.get_file_extension()
         node = self._compile_node_by_id(refrain.path / "src" / suffix)
+        module = EHIR_Module(
+            id=node.module.id,
+            ast=deepcopy(node.module.ast),
+        )
 
-        node.module.ast = Resolver().run(node.module.ast)
-        node.module.ast = Normalizer().run(node.module.ast)
-        node.module.ast = Deallocator().run(node.module.ast)
-        node.module.ast = Cfree_Simplifier_Pass().run(node.module.ast)
-        node.module.ast = Downgrader().run(node.module.ast)
-        processed_mod = Postprocessor().run(node.module)
+        module.ast = Resolver().run(module.ast)
+        module.ast = Normalizer().run(module.ast)
+        module.ast = Deallocator().run(module.ast)
+        module.ast = Cfree_Simplifier_Pass().run(module.ast)
+        module.ast = Downgrader().run(module.ast)
+        processed_mod = Postprocessor().run(module)
 
         return processed_mod
 
@@ -66,48 +72,56 @@ class EHIR_ProjectCompiler:
         if node := self.tree.get(id):
             return node
 
-        module = self.frontend.get_module_by_id(id=id)
-        node = TreeNode(module)
-        self.tree[module.id] = node
+        original_module = self.frontend.get_module_by_id(id=id)
 
-        filtered_ast = []
-        for derective in module.ast:
-            if not isinstance(derective, Derective_import):
-                filtered_ast.append(derective)
+        module = EHIR_Module(
+            id=original_module.id,
+            ast=list(original_module.ast),
+        )
+
+        node = TreeNode(module)
+        self.tree[id] = node
+
+        resolved_ast = []
+
+        for directive in module.ast:
+            if not isinstance(directive, Derective_import):
+                resolved_ast.append(directive)
                 continue
 
-            print(id, derective)
-            parent_refrain_name = derective.prefix[0]
+            parent_refrain_name = directive.prefix[0]
+
             if parent_refrain_name in self.refrains:
                 parent_id = self.refrains[parent_refrain_name].path / "src" / f"lib{self.frontend.get_file_extension()}"
             else:
-                parent_id = (id.parent / Path(*derective.prefix)).with_suffix(self.frontend.get_file_extension())
+                parent_id = (id.parent / Path(*directive.prefix)).with_suffix(self.frontend.get_file_extension())
                 if not parent_id.exists():
                     parent_id = parent_id.parent / parent_id.stem / f"mod{self.frontend.get_file_extension()}"
 
             if not parent_id.exists():
-                raise RuntimeError(f"Unable to import: {parent_id}")
+                raise RuntimeError(f"Unable to find import path: {parent_id}")
 
             node.dependencies.add(parent_id)
+
             parent_node = self._compile_node_by_id(parent_id)
+            parent_ast = parent_node.module.ast
 
-            if derective.symbol == "*":
-                for parent_derective in parent_node.module.ast:
-                    if not isinstance(parent_derective, Derective_import):
+            if directive.symbol == "*":
+                for d in parent_ast:
+                    if isinstance(d, Derective_import):
                         continue
-                    filtered_ast.append(parent_derective)
+                    resolved_ast.append(d)
+
             else:
-                for parent_derective in parent_node.module.ast:
-                    if isinstance(parent_derective, Derective_import):
+                for d in parent_ast:
+                    if isinstance(d, Derective_import):
                         continue
 
-                    elif isinstance(parent_derective, (Derective_fn, Derective_struct, Derective_enum)) and (
-                        parent_derective.name == derective.symbol or derective.symbol == "*"
-                    ):
-                        filtered_ast.append(parent_derective)
+                    if isinstance(d, (Derective_fn, Derective_struct, Derective_enum)) and d.name == directive.symbol:
+                        resolved_ast.append(d)
                         break
                 else:
-                    raise RuntimeError(f"Unable to import: {derective}")
+                    raise RuntimeError(f"Unable to import: {directive}")
 
-        module.ast = filtered_ast
+        node.module.ast = resolved_ast
         return node

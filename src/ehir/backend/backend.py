@@ -16,6 +16,13 @@ class EHIR_Backend(ABC):
     target_dir: Path
     opt_profile: OptProfile = OptProfile.debug
 
+    @property
+    def profile_path(self) -> Path:
+        return self.target_dir / self.opt_profile
+
+    def __post_init__(self):
+        self.profile_path.mkdir(parents=True, exist_ok=True)
+
     @abstractmethod
-    def compile_module(self, module: ProcessedModule) -> Path:
+    def compile_module(self, module: ProcessedModule, name: str) -> Path:
         raise NotImplementedError
