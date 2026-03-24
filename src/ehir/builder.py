@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from ehir.core.block import Block
@@ -31,7 +32,7 @@ from ehir.core.variable import Parameter, TypedVariable, Variable
 
 @dataclass
 class EHIR_Module:
-    id: str
+    id: Path
     ast: list[Derective]
 
     def __str__(self) -> str:
