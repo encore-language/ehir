@@ -20,11 +20,11 @@ def main():
             Refrain(
                 name=refrain.name,
                 path=refrain,
-                type=Refrain.TargetType.LIBRARY,
+                type=Refrain.TargetType.STATIC_LIB,
             )
         )
 
-    compiler.add_refrain_to_build(Refrain(name=cwd.name, path=cwd, type=Refrain.TargetType.BINARY))
+    compiler.add_refrain_to_build(Refrain(name=cwd.name, path=cwd, type=Refrain.TargetType.EXECUTABLE))
     compiler.compile_all()
 
 

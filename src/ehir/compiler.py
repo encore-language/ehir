@@ -1,27 +1,19 @@
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass, field
-from enum import StrEnum, auto
 from pathlib import Path
 
 from ehir.backend import EHIR_Backend
 from ehir.builder import EHIR_Module
+from ehir.cache import CompiledRefrainCache
 from ehir.core.derectives import Derective_enum, Derective_fn, Derective_import, Derective_struct
 from ehir.format import ThemePalette, printfmt
 from ehir.frontend import EHIR_Frontend
-from ehir.postprocessor import Postprocessor, ProcessedModule
+from ehir.postprocessor import Postprocessor
+from ehir.refrain import CompiledRefrain, Refrain
 from ehir.simplifier import Deallocator, Downgrader, Normalizer, Resolver
 from ehir.simplifier.cfree import Cfree_Simplifier_Pass
-
-
-@dataclass
-class Refrain:
-    class TargetType(StrEnum):
-        BINARY = auto()
-        LIBRARY = auto()
-
-    name: str
-    path: Path
-    type: TargetType = TargetType.BINARY
+from ehir.version import COMPILER_VERSION
 
 
 @dataclass
@@ -34,26 +26,60 @@ class TreeNode:
 class EHIR_ProjectCompiler:
     frontend: EHIR_Frontend
     backend: EHIR_Backend
+    cache_dir: Path | None = None
     refrains: dict[str, Refrain] = field(default_factory=dict)
     tree: dict[Path, TreeNode] = field(default_factory=dict)
+    compiled_refrains: dict[str, CompiledRefrain] = field(default_factory=dict)
+    _cache: CompiledRefrainCache = field(init=False)
+    _compiler_version: str = field(init=False, default=COMPILER_VERSION)
+
+    def __post_init__(self):
+        if self.cache_dir is None:
+            self.cache_dir = self.backend.target_dir.parent / ".ehir" / "cache"
+
+        self._cache = CompiledRefrainCache(self.cache_dir)
 
     def add_refrain_to_build(self, refrain: Refrain):
         if refrain.name in self.refrains:
             return
         self.refrains[refrain.name] = refrain
 
-    def compile_all(self) -> list[tuple[str, Path]]:
+    def prepare_all(self) -> list[CompiledRefrain]:
+        return [self.prepare_refrain(refrain) for refrain in self.refrains.values()]
+
+    def emit_all(
+        self,
+        backend: EHIR_Backend | None = None,
+        compiled_refrains: list[CompiledRefrain] | None = None,
+    ) -> list[tuple[str, Path]]:
+        active_backend = backend or self.backend
+        prepared = self.prepare_all() if compiled_refrains is None else compiled_refrains
+
         result = []
-        for refrain in self.refrains.values():
-            mod = self._compile_refrain(refrain)
-            self.backend.compile_module(mod, name=refrain.name)
+        for compiled_refrain in prepared:
+            output_path = active_backend.compile_refrain(compiled_refrain)
+            result.append((compiled_refrain.name, output_path))
         return result
 
-    def _compile_refrain(self, refrain: Refrain) -> ProcessedModule:
+    def compile_all(self) -> list[tuple[str, Path]]:
+        return self.emit_all()
+
+    def prepare_refrain(self, refrain: Refrain) -> CompiledRefrain:
+        if compiled_refrain := self.compiled_refrains.get(refrain.name):
+            return compiled_refrain
+
+        entrypoint_id = self._get_entrypoint_id(refrain)
+        node = self._compile_node_by_id(entrypoint_id)
+        source_files = self._collect_source_files(entrypoint_id)
+        semantic_hash = self._build_semantic_hash(refrain, source_files)
+
+        if compiled_refrain := self._cache.load(refrain.name, semantic_hash):
+            printfmt(f"[{refrain.name}] Cache hit.\n", style=ThemePalette.ACCENT_TEXT)
+            self.compiled_refrains[refrain.name] = compiled_refrain
+            return compiled_refrain
+
         printfmt(f"[{refrain.name}] Compiling...\n", style=ThemePalette.ACCENT_TEXT)
 
-        suffix = ("lib" if refrain.type == Refrain.TargetType.LIBRARY else "main") + self.frontend.get_file_extension()
-        node = self._compile_node_by_id(refrain.path / "src" / suffix)
         module = EHIR_Module(
             id=node.module.id,
             ast=deepcopy(node.module.ast),
@@ -66,7 +92,50 @@ class EHIR_ProjectCompiler:
         module.ast = Downgrader().run(module.ast)
         processed_mod = Postprocessor().run(module)
 
-        return processed_mod
+        compiled_refrain = CompiledRefrain(
+            name=refrain.name,
+            path=refrain.path,
+            type=refrain.type,
+            module=processed_mod,
+            semantic_hash=semantic_hash,
+            compiler_version=self._compiler_version,
+            dependencies=sorted(node.dependencies),
+            source_files=source_files,
+        )
+        self._cache.store(compiled_refrain)
+        self.compiled_refrains[refrain.name] = compiled_refrain
+        return compiled_refrain
+
+    def _get_entrypoint_id(self, refrain: Refrain) -> Path:
+        return refrain.path / "src" / f"{refrain.entrypoint_stem}{self.frontend.get_file_extension()}"
+
+    def _collect_source_files(self, entrypoint_id: Path) -> list[Path]:
+        observed: set[Path] = set()
+
+        def visit(module_id: Path):
+            if module_id in observed:
+                return
+
+            observed.add(module_id)
+            node = self.tree[module_id]
+            for dependency in sorted(node.dependencies):
+                visit(dependency)
+
+        visit(entrypoint_id)
+        return sorted(observed)
+
+    def _build_semantic_hash(self, refrain: Refrain, source_files: list[Path]) -> str:
+        digest = hashlib.sha256()
+        digest.update(self._compiler_version.encode())
+        digest.update(refrain.name.encode())
+        digest.update(refrain.type.value.encode())
+
+        for source_file in source_files:
+            resolved_file = source_file.resolve()
+            digest.update(resolved_file.as_posix().encode())
+            digest.update(resolved_file.read_bytes())
+
+        return digest.hexdigest()
 
     def _compile_node_by_id(self, id: Path) -> TreeNode:
         if node := self.tree.get(id):

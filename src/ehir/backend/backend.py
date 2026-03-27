@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import StrEnum, auto
 from pathlib import Path
 
-from ehir.postprocessor import ProcessedModule
+from ehir.refrain import CompiledRefrain
 
 
 @dataclass
@@ -24,5 +24,5 @@ class EHIR_Backend(ABC):
         self.profile_path.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
-    def compile_module(self, module: ProcessedModule, name: str) -> Path:
+    def compile_refrain(self, refrain: CompiledRefrain) -> Path:
         raise NotImplementedError
