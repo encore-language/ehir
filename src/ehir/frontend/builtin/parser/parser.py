@@ -561,7 +561,7 @@ class Parser:
                 self._safe_consume(t.COMMA)
                 params.append(self._parse_variable())
         self._safe_consume(t.RIGHT_PAREN)
-        return Struct(struct_as_type.name, struct_as_type.generics, params)
+        return Struct(name=struct_as_type.name, generics=struct_as_type.generics, args=params)
 
     def _parse_enum_init(self) -> Enum:
         enum_as_type = self._parse_type()
@@ -570,7 +570,13 @@ class Parser:
         self._safe_consume(t.LEFT_PAREN)
         payload = None
         if not isinstance(self._lookup_curr(), t.RIGHT_PAREN):
-            payload = self._parse_struct_init()
+            if isinstance(self._lookup_next(), (t.LEFT_PAREN, t.LEFT_BRACKET, t.LESS)):
+                payload = self._parse_struct_init()
+            else:
+                payload_var = self._parse_variable()
+                if payload_var.type is None:
+                    raise ValueError("Enum payload capture must use a typed variable")
+                payload = Struct(name=payload_var.type.name, value=payload_var, type=payload_var.type)
         self._safe_consume(t.RIGHT_PAREN)
         return Enum(name=enum_as_type.name, generics=enum_as_type.generics, variant=variant, payload=payload)
 

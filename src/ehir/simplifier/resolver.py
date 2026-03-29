@@ -64,6 +64,7 @@ from ehir.core.instructions.operators.comparison import (
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
 from ehir.core.primitives import Usize_t
 from ehir.core.primitives.base import PrimitiveType
+from ehir.core.struct import Struct
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
 from ehir.core.variable import Parameter, TypedVariable, Variable
 
@@ -289,8 +290,11 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
                     self._resolve_enum_payload(instr.enum)
                     if instr.enum.payload is not None:
-                        for arg in instr.enum.payload.args:
-                            add_variable(arg)
+                        if instr.enum.payload.value is None:
+                            for arg in instr.enum.payload.args:
+                                add_variable(arg)
+                        else:
+                            instr.enum.payload.value = add_variable(instr.enum.payload.value)
 
                 elif isinstance(instr, (Instruction_csos, Instruction_csoh, Instruction_scsos, Instruction_scsoh)):
                     instr.struct = self._resolve_struct(instr.struct)
@@ -341,8 +345,11 @@ class Resolver:
                     instr.var_out = add_variable(instr.var_out)
                     self._resolve_enum_payload(instr.enum)
                     if instr.enum.payload is not None:
-                        for arg in instr.enum.payload.args:
-                            add_variable(arg)
+                        if instr.enum.payload.value is None:
+                            for arg in instr.enum.payload.args:
+                                add_variable(arg)
+                        else:
+                            instr.enum.payload.value = add_variable(instr.enum.payload.value)
 
                 elif isinstance(instr, Instruction_lcsos):
                     instr.struct = self._resolve_struct(instr.struct)
@@ -690,22 +697,35 @@ class Resolver:
                     raise TypeError(f"Enum variant '{enum.variant}' expects payload")
                 return
 
-            enum.payload = self._resolve_struct(enum.payload)
             if variant.type is None:
                 raise TypeError(f"Enum variant '{enum.variant}' must not have payload")
-            if enum.payload.as_type() != variant.type:
-                raise TypeError(
-                    f"Type mismatch for enum variant '{enum.variant}': {enum.payload.as_type()} != {variant.type}"
-                )
 
-            struct_params = self._get_struct_params(enum.payload.name, enum.payload.generics)
-            for i, arg in enumerate(enum.payload.args):
-                expected_type = struct_params[i].type
-                if arg.type is not None and arg.type != expected_type:
-                    raise TypeError(
-                        f"Type mismatch for argument {i} of struct '{enum.payload.name}': {arg.type} != {expected_type}"
-                    )
-                arg.type = expected_type
+            if enum.payload.value is None:
+                enum.payload = self._resolve_struct(enum.payload)
+            else:
+                if enum.payload.value.type is not None:
+                    enum.payload.value.type = self._resolve_type(enum.payload.value.type)
+                if enum.payload.value.type is None:
+                    enum.payload.value.type = variant.type
+                enum.payload.type = enum.payload.value.type
+
+            payload_type = enum.payload.as_type()
+
+            if payload_type != variant.type:
+                raise TypeError(f"Type mismatch for enum variant '{enum.variant}': {payload_type} != {variant.type}")
+
+            if enum.payload.value is None:
+                struct_params = self._get_struct_params(enum.payload.name, enum.payload.generics)
+                for i, arg in enumerate(enum.payload.args):
+                    expected_type = struct_params[i].type
+                    if arg.type is not None and arg.type != expected_type:
+                        raise TypeError(
+                            f"Type mismatch for argument {i} of struct '{enum.payload.name}': {arg.type} != {expected_type}"
+                        )
+                    arg.type = expected_type
+            else:
+                enum.payload.type = variant.type
+                enum.payload.value.type = variant.type
             return
 
         raise TypeError(f"Unknown enum variant '{enum.variant}' in '{enum.name}'")

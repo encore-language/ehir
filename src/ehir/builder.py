@@ -102,13 +102,13 @@ class EHIR_Builder:
         return lcpos
 
     def build_lcsos(self, struct_name: str, args: list[Variable], name: Optional[str] = None) -> Instruction_lcsos:
-        struct = Struct(struct_name, args)
+        struct = Struct(name=struct_name, args=args)
         lcsos = Instruction_lcsos(var_out=self._reserve_variable(name, struct.as_type()), struct=struct)
         self._add(lcsos)
         return lcsos
 
     def build_scsos(self, struct_name: str, args: list[Variable], name: Optional[str] = None) -> Instruction_scsos:
-        struct = Struct(struct_name, args)
+        struct = Struct(name=struct_name, args=args)
         scsos = Instruction_scsos(
             var_out=self._reserve_variable(name, StackSmartPointer(struct.as_type())), struct=struct
         )
@@ -117,7 +117,8 @@ class EHIR_Builder:
 
     def build_scsoh(self, struct_name: str, args: list[Variable], name: Optional[str] = None) -> Instruction_scsoh:
         scsoh = Instruction_scsoh(
-            var_out=self._reserve_variable(name, HeapSmartPointer(Type(struct_name))), struct=Struct(struct_name, args)
+            var_out=self._reserve_variable(name, HeapSmartPointer(Type(struct_name))),
+            struct=Struct(name=struct_name, args=args),
         )
         self._add(scsoh)
         return scsoh

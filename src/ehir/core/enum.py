@@ -26,6 +26,11 @@ class Enum:
     def as_type(self) -> Type:
         return Type(self.name, deepcopy(self.generics))
 
+    def payload_type(self) -> Type | None:
+        if self.payload is None:
+            return None
+        return self.payload.as_type()
+
     def __str__(self) -> str:
         generics_repr = ("[" + ", ".join(str(x) for x in self.generics) + "]") if self.generics else ""
         if self.payload is None:

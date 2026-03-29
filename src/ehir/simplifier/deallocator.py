@@ -231,9 +231,11 @@ class Deallocator:
                 ),
             ):
                 if hasattr(instr, "struct"):
-                    args = instr.struct.args
+                    args = [instr.struct.value] if instr.struct.value is not None else instr.struct.args
                 elif instr.enum.payload is not None:
-                    args = instr.enum.payload.args
+                    args = (
+                        [instr.enum.payload.value] if instr.enum.payload.value is not None else instr.enum.payload.args
+                    )
                 else:
                     args = []
                 for arg in args:

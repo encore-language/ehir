@@ -377,12 +377,19 @@ class Downgrader:
 
         payload_type = enum.payload.as_type()
         payload_ptr = TypedVariable(name=f".{out.name}_{enum.variant}_payload", type=Pointer(payload_type))
-        if on_heap:
-            payload_init = Instruction_csoh(var_out=payload_ptr, struct=enum.payload)
-            result.extend(self._downgrade_csoh(payload_init))
+        if enum.payload.value is None:
+            if on_heap:
+                payload_init = Instruction_csoh(var_out=payload_ptr, struct=enum.payload)
+                result.extend(self._downgrade_csoh(payload_init))
+            else:
+                payload_init = Instruction_csos(var_out=payload_ptr, struct=enum.payload)
+                result.extend(self._downgrade_csos(payload_init))
         else:
-            payload_init = Instruction_csos(var_out=payload_ptr, struct=enum.payload)
-            result.extend(self._downgrade_csos(payload_init))
+            if on_heap:
+                result.append(Instruction_halloc(var_out=payload_ptr, type=payload_type))
+            else:
+                result.append(Instruction_salloc(var_out=payload_ptr, type=payload_type))
+            result.append(Instruction_store(var_src=enum.payload.value, var_dst=payload_ptr))
 
         payload_field_index = next(i for i, param in enumerate(lowered_struct.params) if param.name == enum.variant)
         payload_field_ptr = TypedVariable(name=f".{out.name}_{enum.variant}_field_ptr", type=Pointer(payload_ptr.type))
