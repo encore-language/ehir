@@ -27,7 +27,8 @@ from ehir.core.instructions.operators.arithmetic import (
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
 from ehir.core.instructions.special import Instruction_cfree, Instruction_comment
 from ehir.core.primitives import Usize, Usize_t
-from ehir.core.type import Pointer, SmartPointer, Type
+from ehir.core.primitives.base import PrimitiveType
+from ehir.core.type import Pointer, SmartPointer, Type, mangle_type_name
 from ehir.core.variable import Parameter, TypedVariable, Variable
 from ehir.simplifier.normalizer.norm_fn import Normalized_fn
 
@@ -58,6 +59,8 @@ class Cfree_Simplifier_Pass:
                 for instr in block.get_body():
                     if isinstance(instr, Instruction_cfree):
                         assert isinstance(instr.var.type, SmartPointer)
+                        if not self._is_concrete_type(instr.var.type):
+                            continue
                         self._generate_cfree(instr.var.type)
 
         for fn in self._fns.values():
@@ -93,7 +96,11 @@ class Cfree_Simplifier_Pass:
 
         if isinstance(instr, Instruction_cfree):
             assert instr.var.type
+            cfree_name = instr.var.type.name
             if isinstance(instr.var.type, SmartPointer):
+                if not self._is_concrete_type(instr.var.type):
+                    return [instr]
+                cfree_name = instr.var.type.get_name()
                 self._unwrap_smart_pointer(instr.var)
 
             mode_var = TypedVariable(".cfree_mode", Usize_t())
@@ -103,15 +110,28 @@ class Cfree_Simplifier_Pass:
             )
             instr = Instruction_call(
                 var_out=TypedVariable(".cfree_out", Usize_t()),
-                fn_name=f"cfree_{instr.var.type.name}",
+                fn_name=f"cfree_{cfree_name}",
                 generics=[],
                 args=[instr.var, mode_var],
             )
             return [zero, instr]
         return [instr]
 
+    def _is_concrete_type(self, typ: Type) -> bool:
+        if isinstance(typ, SmartPointer):
+            return self._is_concrete_type(typ.pointee)
+        if isinstance(typ, Pointer):
+            return self._is_concrete_type(typ.pointee)
+        if isinstance(typ, PrimitiveType):
+            return True
+        if typ.generics and not all(self._is_concrete_type(generic) for generic in typ.generics):
+            return False
+        return typ.name in self._structs or not typ.name.isidentifier() or typ.name.startswith(("u", "i", "f"))
+
     def _unwrap_smart_pointer(self, var: Variable):
         assert isinstance(var.type, SmartPointer)
+        if var.type.get_name() not in self._structs:
+            self._generate_wrapper_struct(var.type)
         smart_struct = self._structs[var.type.get_name()]
         var.type = Type(name=smart_struct.name)
 
@@ -140,7 +160,10 @@ class Cfree_Simplifier_Pass:
             return self._fns[name]
         self._generate_wrapper_struct(typ)
 
-        struct_wrapped = self._structs[typ.name]
+        wrapped_name = typ.pointee.name
+        if wrapped_name not in self._structs and typ.pointee.generics:
+            wrapped_name = mangle_type_name(typ.pointee)
+        struct_wrapped = self._structs[wrapped_name]
         struct = self._structs[typ.get_name()]
 
         self_param = TypedVariable(name="self", type=Type(typ.get_name()))
@@ -212,7 +235,7 @@ class Cfree_Simplifier_Pass:
                         Instruction_store(var_src=ref_cnt_new_ptr, var_dst=ref_cnt_ptr),
                         Instruction_call(
                             var_out=TypedVariable(name=f".pass1_{field}", type=Usize_t()),
-                            fn_name=f"cfree_{struct_wrapped.params[i].type.name}",
+                            fn_name=f"cfree_{struct_wrapped.params[i].type.get_name()}",
                             args=[self_param, var_1],
                         ),
                     ]
@@ -320,7 +343,7 @@ class Cfree_Simplifier_Pass:
                 pass_2v2_block.body.append(
                     Instruction_call(
                         var_out=TypedVariable(name=f".pass2_{field}", type=Usize_t()),
-                        fn_name=f"cfree_{struct_wrapped.params[i].type.name}",
+                        fn_name=f"cfree_{struct_wrapped.params[i].type.get_name()}",
                         args=[self_param, var_2],
                     ),
                 )
@@ -359,7 +382,7 @@ class Cfree_Simplifier_Pass:
                 pass_3v1_block.body.append(
                     Instruction_call(
                         var_out=TypedVariable(name=f".pass3_{field}", type=Usize_t()),
-                        fn_name=f"cfree_{struct_wrapped.params[i].type.name}",
+                        fn_name=f"cfree_{struct_wrapped.params[i].type.get_name()}",
                         args=[self_param, var_3],
                     ),
                 )

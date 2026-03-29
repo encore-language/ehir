@@ -7,6 +7,8 @@ from ehir.backend import EHIR_Backend
 from ehir.builder import EHIR_Module
 from ehir.cache import CompiledRefrainCache
 from ehir.core.derectives import Derective_enum, Derective_fn, Derective_import, Derective_struct
+from ehir.core.primitives.base import PrimitiveType
+from ehir.core.type import Pointer, SmartPointer, Type
 from ehir.format import ThemePalette, printfmt
 from ehir.frontend import EHIR_Frontend
 from ehir.postprocessor import Postprocessor
@@ -86,6 +88,12 @@ class EHIR_ProjectCompiler:
         )
 
         module.ast = Resolver().run(module.ast)
+        concrete_type_names = {
+            directive.name for directive in module.ast if isinstance(directive, (Derective_struct, Derective_enum))
+        }
+        module.ast = [
+            directive for directive in module.ast if self._is_backend_emittable(directive, concrete_type_names)
+        ]
         module.ast = Normalizer().run(module.ast)
         module.ast = Deallocator().run(module.ast)
         module.ast = Cfree_Simplifier_Pass().run(module.ast)
@@ -105,6 +113,34 @@ class EHIR_ProjectCompiler:
         self._cache.store(compiled_refrain)
         self.compiled_refrains[refrain.name] = compiled_refrain
         return compiled_refrain
+
+    def _is_backend_emittable(self, directive, concrete_type_names: set[str]) -> bool:
+        if getattr(directive, "generics", []):
+            return False
+
+        if isinstance(directive, Derective_fn):
+            return all(
+                self._is_concrete_type(param.type, concrete_type_names) for param in directive.params
+            ) and self._is_concrete_type(directive.ret_type, concrete_type_names)
+        if isinstance(directive, Derective_struct):
+            return all(self._is_concrete_type(param.type, concrete_type_names) for param in directive.params)
+        if isinstance(directive, Derective_enum):
+            return all(
+                variant.type is None or self._is_concrete_type(variant.type, concrete_type_names)
+                for variant in directive.variants
+            )
+        return True
+
+    def _is_concrete_type(self, typ: Type, concrete_type_names: set[str]) -> bool:
+        if isinstance(typ, SmartPointer):
+            return self._is_concrete_type(typ.pointee, concrete_type_names)
+        if isinstance(typ, Pointer):
+            return self._is_concrete_type(typ.pointee, concrete_type_names)
+        if isinstance(typ, PrimitiveType):
+            return True
+        if typ.generics and not all(self._is_concrete_type(generic, concrete_type_names) for generic in typ.generics):
+            return False
+        return typ.name in concrete_type_names or not typ.name.isidentifier() or typ.name.startswith(("u", "i", "f"))
 
     def _get_entrypoint_id(self, refrain: Refrain) -> Path:
         return refrain.path / "src" / f"{refrain.entrypoint_stem}{self.frontend.get_file_extension()}"
