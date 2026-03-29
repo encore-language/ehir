@@ -36,6 +36,8 @@ class Lexer:
                     self._append_token(t.NEWLINE)
                     self._line += 1
                     self._column = 0
+                case '"':
+                    self._parse_string()
 
                 # Parenthesses
                 case "(":
@@ -117,7 +119,21 @@ class Lexer:
     def _parse_number(self):
         while self._lookup_curr().isdigit():
             self._consume()
+        if self._lookup_curr() == "." and self._lookup_next().isdigit():
+            self._consume()
+            while self._lookup_curr().isdigit():
+                self._consume()
         self._append_token(t.NUMBER)
+
+    def _parse_string(self):
+        while not self._is_at_end():
+            curr_char = self._consume()
+            if curr_char == "\\" and not self._is_at_end():
+                self._consume()
+                continue
+            if curr_char == '"':
+                break
+        self._append_token(t.STRING)
 
     def _parse_identifier(self):
         while self._lookup_curr().isalnum() or self._lookup_curr() == "_":

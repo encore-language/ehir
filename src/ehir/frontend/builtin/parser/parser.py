@@ -62,7 +62,7 @@ from ehir.core.instructions.operators.comparison import (
     Instruction_les,
 )
 from ehir.core.instructions.operators.logic import Instruction_ieq, Instruction_neq
-from ehir.core.primitives import Usize, Usize_t
+from ehir.core.primitives import Float, Float_t, Isize, Isize_t, Str, Str_t, Usize, Usize_t
 from ehir.core.primitives.base import Primitive, PrimitiveType
 from ehir.core.struct import Struct
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
@@ -602,9 +602,21 @@ class Parser:
         name = self._safe_consume(t.IDENTIFIER).string
 
         type = Type(name)
-        if name.startswith("u") and name[1:].isdigit():
+        if name == "usize":
+            type = Usize_t()
+        elif name == "isize":
+            type = Isize_t()
+        elif name == "str":
+            type = Str_t()
+        elif name.startswith("u") and name[1:].isdigit():
             size = int(name[1:])
             type = Usize_t(size=size)
+        elif name.startswith("i") and name[1:].isdigit():
+            size = int(name[1:])
+            type = Isize_t(size=size)
+        elif name.startswith("f") and name[1:].isdigit():
+            size = int(name[1:])
+            type = Float_t(size=size)
 
         type.generics = self._parse_generics() if isinstance(self._lookup_curr(), t.LEFT_BRACKET) else []
         if isinstance(self._lookup_curr(), t.STAR):
@@ -659,15 +671,38 @@ class Parser:
         raise AssertionError("Unreachable")
 
     def _parse_primitive(self) -> Primitive:
+        sign = 1
+        if isinstance(self._lookup_curr(), t.MINUS):
+            self._safe_consume(t.MINUS)
+            sign = -1
+
         curr_token = self._consume()
+        if isinstance(curr_token, t.STRING):
+            suffix = self._safe_consume(t.IDENTIFIER).string
+            if suffix != "_str":
+                raise ValueError(f"Invalid primitive suffix: {suffix}")
+            return Str(val=self._unescape_string_literal(curr_token.string[1:-1]))
+
         if isinstance(curr_token, t.NUMBER):
             suffix = self._safe_consume(t.IDENTIFIER).string
+            if suffix == "_usize":
+                return Usize(val=int(curr_token.string) * sign)
             if suffix.startswith("_u"):
                 size = int(suffix[2:])
-                return Usize(val=int(curr_token.string), size=size)
-            else:
-                raise ValueError(f"Invalid primitive suffix: {suffix}")
-        raise ValueError(f"Expected number, got {curr_token}")
+                return Usize(val=int(curr_token.string) * sign, size=size)
+            if suffix == "_isize":
+                return Isize(val=int(curr_token.string) * sign)
+            if suffix.startswith("_i"):
+                size = int(suffix[2:])
+                return Isize(val=int(curr_token.string) * sign, size=size)
+            if suffix.startswith("_f"):
+                size = int(suffix[2:])
+                return Float(val=float(f"{'-' if sign < 0 else ''}{curr_token.string}"), size=size)
+            raise ValueError(f"Invalid primitive suffix: {suffix}")
+        raise ValueError(f"Expected primitive literal, got {curr_token}")
+
+    def _unescape_string_literal(self, string: str) -> str:
+        return bytes(string, "utf-8").decode("unicode_escape")
 
     def _lookup_curr(self) -> t.Token:
         return t.EOF("", 0, 0) if self._is_at_end(0) else self._tokens[self._consumed + 0]
