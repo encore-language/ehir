@@ -56,20 +56,20 @@ class EHIR_Builder:
     def build_cimp(self, prefix: list[str], symbol: str):
         self.module.ast.append(Derective_cimp(prefix=prefix, symbol=symbol))
 
-    def build_struct(self, name: str, params: list[Parameter]):
+    def build_struct(self, name: str, generics: list[Type], params: list[Parameter]):
         self.module.ast.append(
             Derective_struct(
                 name=name,
-                generics=[],
+                generics=generics,
                 params=params,
             )
         )
 
-    def build_fn(self, name: str, params: list[Parameter], ret_type: Type):
-        fn = Derective_fn(name=name, generics=[], params=params, body=[], ret_type=ret_type)
+    def build_fn(self, name: str, generics: list[Type], params: list[Parameter], ret_type: Type):
+        fn = Derective_fn(name=name, generics=generics, params=params, body=[], ret_type=ret_type)
         self.module.ast.append(fn)
         self.current_function = fn
-        self.variables = {}
+        self.variables = {p.name: p for p in fn.params}
 
     def build_add(self, lhs: Variable, rhs: Variable, name: Optional[str] = None) -> Instruction_add:
         instr = Instruction_add(self._reserve_variable(name), lhs, rhs)
