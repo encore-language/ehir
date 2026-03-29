@@ -104,6 +104,7 @@ class Cfree_Simplifier_Pass:
             instr = Instruction_call(
                 var_out=TypedVariable(".cfree_out", Usize_t()),
                 fn_name=f"cfree_{instr.var.type.name}",
+                generics=[],
                 args=[instr.var, mode_var],
             )
             return [zero, instr]
@@ -119,6 +120,7 @@ class Cfree_Simplifier_Pass:
         if struct_name not in self._structs:
             struct = Derective_struct(
                 name=struct_name,
+                generics=[],
                 params=[
                     Parameter(name="ptr", type=Pointer(type.pointee)),
                     Parameter(name="ref_cnt", type=Usize_t()),
@@ -425,13 +427,22 @@ class Cfree_Simplifier_Pass:
             name="initiator",
             body=[
                 Instruction_call(
-                    var_out=TypedVariable(name=".pass_1", type=Usize_t()), fn_name=name, args=[self_param, var_1]
+                    var_out=TypedVariable(name=".pass_1", type=Usize_t()),
+                    fn_name=name,
+                    generics=[],
+                    args=[self_param, var_1],
                 ),
                 Instruction_call(
-                    var_out=TypedVariable(name=".pass_2", type=Usize_t()), fn_name=name, args=[self_param, var_2]
+                    var_out=TypedVariable(name=".pass_2", type=Usize_t()),
+                    fn_name=name,
+                    generics=[],
+                    args=[self_param, var_2],
                 ),
                 Instruction_call(
-                    var_out=TypedVariable(name=".pass_3", type=Usize_t()), fn_name=name, args=[self_param, var_3]
+                    var_out=TypedVariable(name=".pass_3", type=Usize_t()),
+                    fn_name=name,
+                    generics=[],
+                    args=[self_param, var_3],
                 ),
             ],
             term=Instruction_br(label=exit_block.name),

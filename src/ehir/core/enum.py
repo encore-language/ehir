@@ -35,4 +35,6 @@ class Enum:
         generics_repr = ("[" + ", ".join(str(x) for x in self.generics) + "]") if self.generics else ""
         if self.payload is None:
             return f"{self.name}{generics_repr}::{self.variant}()"
+        if self.payload.value is not None:
+            return f"{self.name}{generics_repr}::{self.variant}({self.payload.value})"
         return f"{self.name}{generics_repr}::{self.variant}({self.payload})"

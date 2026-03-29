@@ -574,9 +574,12 @@ class Parser:
                 payload = self._parse_struct_init()
             else:
                 payload_var = self._parse_variable()
-                if payload_var.type is None:
-                    raise ValueError("Enum payload capture must use a typed variable")
-                payload = Struct(name=payload_var.type.name, value=payload_var, type=payload_var.type)
+                payload_type = payload_var.type
+                payload = Struct(
+                    name=payload_type.name if payload_type is not None else "_",
+                    value=payload_var,
+                    type=payload_type,
+                )
         self._safe_consume(t.RIGHT_PAREN)
         return Enum(name=enum_as_type.name, generics=enum_as_type.generics, variant=variant, payload=payload)
 

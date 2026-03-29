@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from ehir.core.enum import EnumVariant
-from ehir.core.type import Type
+from ehir.core.type import Type, mangle_type_name
 
 from .base import Derective
 
@@ -13,7 +13,7 @@ class Derective_enum(Derective):
     variants: list[EnumVariant]
 
     def get_conrete_name(self, types: list[Type]) -> str:
-        types_repr = "_".join(str(x) for x in types)
+        types_repr = "_".join(mangle_type_name(x) for x in types)
         return f"{self.name}_{types_repr}"
 
     def __str__(self) -> str:

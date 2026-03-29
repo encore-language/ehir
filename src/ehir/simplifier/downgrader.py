@@ -77,12 +77,14 @@ ENABLE_COMMENTS: bool = True
 
 class Downgrader:
     _structs: dict[str, Derective_struct]
+    _enum_variants: dict[str, list[str]]
     _structs_to_add: list[Derective_struct]
     _fns: dict[str, Normalized_fn]
     _fns_to_add: list[Normalized_fn]
 
     def run(self, ast: list[Derective]) -> list[Derective]:
         self._structs = {}
+        self._enum_variants = {}
         self._structs_to_add = []
         self._fns = {}
         self._fns_to_add = []
@@ -90,6 +92,7 @@ class Downgrader:
         rewritten_ast: list[Derective] = []
         for derective in ast:
             if isinstance(derective, Derective_enum):
+                self._enum_variants[derective.name] = [variant.name for variant in derective.variants]
                 lowered = self._lower_enum_derective(derective)
                 self._structs[lowered.name] = lowered
                 rewritten_ast.append(lowered)
@@ -170,7 +173,8 @@ class Downgrader:
     def _lower_enum_derective(self, enum: Derective_enum) -> Derective_struct:
         params = [Parameter(name="tag", type=Usize_t(8))]
         for variant in enum.variants:
-            assert variant.type is not None
+            if variant.type is None:
+                continue
             params.append(Parameter(name=variant.name, type=Pointer(variant.type)))
         return Derective_struct(name=enum.name, generics=enum.generics, params=params)
 
@@ -292,7 +296,17 @@ class Downgrader:
         out_visited_init = Instruction_lcpos(out_visited, Usize(val=0, size=1))
         deallocate_init = Instruction_lcpos(deallocate, Usize(val=0, size=1))
 
-        s = Struct(name=HeapSmartPointer(instr.struct.as_type()).get_name(), args=[ptr])
+        wrapper_name = HeapSmartPointer(instr.struct.as_type()).get_name()
+        if wrapper_name not in self._structs:
+            wrapper_struct = Derective_struct(
+                name=wrapper_name,
+                generics=[],
+                params=[Parameter(name="ptr", type=ptr.type)],
+            )
+            self._structs[wrapper_name] = wrapper_struct
+            self._structs_to_add.append(wrapper_struct)
+
+        s = Struct(name=wrapper_name, args=[ptr])
         instr.var_out.type = s.as_type()
         res = Instruction_lcsos(instr.var_out, s)
 
@@ -354,7 +368,7 @@ class Downgrader:
         assert isinstance(out.type, Pointer)
 
         lowered_struct = self._structs[enum.name]
-        tag_value = next(i for i, param in enumerate(lowered_struct.params[1:]) if param.name == enum.variant)
+        tag_value = self._enum_variants[enum.name].index(enum.variant)
         tag_var = TypedVariable(name=f".{out.name}_tag", type=Usize_t(8))
         tag_init = Instruction_lcpos(var_out=tag_var, primitive=Usize(tag_value, size=8))
 

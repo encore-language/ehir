@@ -46,3 +46,15 @@ class StackSmartPointer(SmartPointer):
 
     def __str__(self) -> str:
         return f"{self.pointee}<S>"
+
+
+def mangle_type_name(typ: Type) -> str:
+    if isinstance(typ, HeapSmartPointer):
+        return f"{mangle_type_name(typ.pointee)}_H"
+    if isinstance(typ, StackSmartPointer):
+        return f"{mangle_type_name(typ.pointee)}_S"
+    if isinstance(typ, Pointer):
+        return f"{mangle_type_name(typ.pointee)}_ptr"
+    if not typ.generics:
+        return typ.name
+    return f"{typ.name}_{'_'.join(mangle_type_name(generic) for generic in typ.generics)}"

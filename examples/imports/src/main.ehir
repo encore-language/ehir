@@ -1,10 +1,26 @@
-imp mymathlib::Vector2D
-imp mymathlib::vec::Vector3D
+enum Option[T] {
+  Some(T)
+  None
+}
 
-fn main() -> u32 {
-$entry:
-  a: u32 = lcpos 40_u32
-  b: u32 = lcpos 2_u32
-  result: u32 = add a, b
-  ret result
+struct Player {
+  health: u16
+  opponent: Option[Player<H>]
+}
+
+fn main() -> u16 {
+  $entry:
+    p1_0: u16 = lcpos 10_u16
+    p1_1 = lceos Option[Player<H>]::None()
+    p1: Player<H> = scsoh Player(p1_0: u16, p1_1)
+    p2_0: u16 = lcpos 15_u16
+    p2_1 = lceos Option[Player<H>]::Some(p1)
+    p2: Player<H> = scsoh Player(p2_0: u16, p2_1)
+    opponent_1 = sgetfieldptr p1: Player<H>, opponent
+    opponent_2 = lceos Option[Player<H>]::Some(p2)
+    store opponent_2, opponent_1
+    _0 = sgetfield p1: Player<H>, health
+    _1 = sgetfield p2: Player<H>, health
+    _2 = add _0, _1
+    ret _2
 }

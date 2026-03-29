@@ -11,7 +11,7 @@ CACHE_FORMAT_VERSION = 2
 
 
 def _load_symbol(module_name: str, qualname: str) -> type[Any]:
-    symbol: Any = import_module(module_name)
+    symbol = import_module(module_name)
     for part in qualname.split("."):
         symbol = getattr(symbol, part)
     return symbol

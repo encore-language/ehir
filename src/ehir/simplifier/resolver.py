@@ -64,7 +64,6 @@ from ehir.core.instructions.operators.comparison import (
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
 from ehir.core.primitives import Usize_t
 from ehir.core.primitives.base import PrimitiveType
-from ehir.core.struct import Struct
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
 from ehir.core.variable import Parameter, TypedVariable, Variable
 
@@ -134,6 +133,12 @@ class Resolver:
 
         for impl in self.impls:
             self._register_impl(impl)
+
+        for struct in self.structs.values():
+            self._rewrite_types(struct.params, {})
+
+        for enum in self.enums.values():
+            self._rewrite_types(enum.variants, {})
 
         for fn in list(self.fn.values()):
             self._resolve(fn)
@@ -681,7 +686,8 @@ class Resolver:
         if type_name in self.enums:
             params: list[Parameter] = [Parameter(name="tag", type=Usize_t(8))]
             for variant in self._get_enum_variants(type_name, generics):
-                assert variant.type is not None
+                if variant.type is None:
+                    continue
                 params.append(Parameter(name=variant.name, type=Pointer(variant.type)))
             return params
         raise TypeError(f"Unknown composite type '{type_name}'")
