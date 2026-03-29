@@ -718,6 +718,8 @@ class Resolver:
         target_struct = self.structs.get(struct.name)
         if target_struct is None or not target_struct.generics:
             return struct
+        if len(target_struct.generics) != len(struct.generics):
+            return struct
         if not all(self._is_concrete_type(generic) for generic in struct.generics):
             return struct
 
@@ -733,6 +735,8 @@ class Resolver:
         self._rewrite_types(enum, {})
         target_enum = self.enums.get(enum.name)
         if target_enum is None or not target_enum.generics:
+            return enum
+        if len(target_enum.generics) != len(enum.generics):
             return enum
         if not all(self._is_concrete_type(generic) for generic in enum.generics):
             return enum
@@ -943,6 +947,7 @@ class Resolver:
         if (
             target_struct is not None
             and target_struct.generics
+            and len(target_struct.generics) == len(resolved.generics)
             and all(self._is_concrete_type(generic) for generic in resolved.generics)
         ):
             concrete_name = target_struct.get_conrete_name(resolved.generics)
@@ -954,6 +959,7 @@ class Resolver:
         if (
             target_enum is not None
             and target_enum.generics
+            and len(target_enum.generics) == len(resolved.generics)
             and all(self._is_concrete_type(generic) for generic in resolved.generics)
         ):
             concrete_name = target_enum.get_conrete_name(resolved.generics)
