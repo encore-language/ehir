@@ -19,7 +19,7 @@ class Pointer(Type):
     pointee: Type
 
     def __init__(self, pointee: Type):
-        super().__init__(name=pointee.name)
+        super().__init__(name=pointee.name, generics=list(pointee.generics))
         self.pointee = pointee
 
     def __str__(self) -> str:

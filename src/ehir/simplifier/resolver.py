@@ -63,7 +63,7 @@ from ehir.core.instructions.operators.comparison import (
     Instruction_les,
 )
 from ehir.core.instructions.operators.logic import Instruction_and, Instruction_ieq, Instruction_neq, Instruction_or
-from ehir.core.primitives import Usize_t
+from ehir.core.primitives import Float_t, Isize_t, Str_t, Usize_t
 from ehir.core.primitives.base import PrimitiveType
 from ehir.core.type import HeapSmartPointer, Pointer, StackSmartPointer, Type
 from ehir.core.variable import Parameter, TypedVariable, Variable
@@ -378,6 +378,8 @@ class Resolver:
                     for i, arg in enumerate(instr.struct.args):
                         expected_type = struct_params[i].type
 
+                        if arg.type is not None:
+                            arg.type = self._resolve_type(arg.type)
                         if arg.type is not None and arg.type != expected_type:
                             raise TypeError(
                                 f"Type mismatch for argument {i} of struct '{instr.struct.name}': {arg.type} != {expected_type}"
@@ -427,6 +429,8 @@ class Resolver:
                     for i, arg in enumerate(instr.struct.args):
                         expected_type = struct_params[i].type
 
+                        if arg.type is not None:
+                            arg.type = self._resolve_type(arg.type)
                         if arg.type is not None and arg.type != expected_type:
                             raise TypeError(
                                 f"Type mismatch for argument {i} of struct '{instr.struct.name}': {arg.type} != {expected_type}"
@@ -814,6 +818,8 @@ class Resolver:
                 struct_params = self._get_struct_params(enum.payload.name, enum.payload.generics)
                 for i, arg in enumerate(enum.payload.args):
                     expected_type = struct_params[i].type
+                    if arg.type is not None:
+                        arg.type = self._resolve_type(arg.type)
                     if arg.type is not None and arg.type != expected_type:
                         raise TypeError(
                             f"Type mismatch for argument {i} of struct '{enum.payload.name}': {arg.type} != {expected_type}"
@@ -936,9 +942,24 @@ class Resolver:
             return StackSmartPointer(self._replace_type(typ.pointee, generic_mapping))
         if isinstance(typ, Pointer):
             return Pointer(self._replace_type(typ.pointee, generic_mapping))
+        if isinstance(typ, PrimitiveType):
+            return deepcopy(typ)
 
         if not typ.generics and typ.name in generic_mapping:
             return deepcopy(generic_mapping[typ.name])
+
+        if typ.name == "usize":
+            return Usize_t()
+        if typ.name == "isize":
+            return Isize_t()
+        if typ.name == "str":
+            return Str_t()
+        if typ.name.startswith("u") and typ.name[1:].isdigit():
+            return Usize_t(int(typ.name[1:]))
+        if typ.name.startswith("i") and typ.name[1:].isdigit():
+            return Isize_t(int(typ.name[1:]))
+        if typ.name.startswith("f") and typ.name[1:].isdigit():
+            return Float_t(int(typ.name[1:]))
 
         resolved = deepcopy(typ)
         resolved.generics = [self._replace_type(generic, generic_mapping) for generic in typ.generics]
