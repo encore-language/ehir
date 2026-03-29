@@ -204,6 +204,8 @@ class Lexer:
                 self._append_token(t.BR)
             case "cbr":
                 self._append_token(t.CBR)
+            case "match":
+                self._append_token(t.MATCH)
             case "switch":
                 self._append_token(t.SWITCH)
             case "ret":

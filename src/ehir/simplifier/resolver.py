@@ -30,6 +30,7 @@ from ehir.core.instructions.control_flow import (
     Instruction_br,
     Instruction_call,
     Instruction_cbr,
+    Instruction_match,
     Instruction_phi,
     Instruction_ret,
     Instruction_switch,
@@ -254,11 +255,67 @@ class Resolver:
             instr.var_out.type = expected_type
             instr.var_out = add_variable(instr.var_out)
 
+        block_map = {block.name: block for block in fn.body}
+
+        def inject_match_payload_binding(instr: Instruction_match):
+            assert instr.cond_var.type is not None
+            cond_type = instr.cond_var.type
+            if cond_type.name not in self.enums:
+                return
+
+            enum_variants = {
+                variant.name: variant for variant in self._get_enum_variants(cond_type.name, cond_type.generics)
+            }
+            injected_labels: set[str] = set()
+            for case in instr.cases:
+                if case.payload_var is None:
+                    continue
+                if case.label in injected_labels:
+                    raise TypeError(f"Payload-binding match target block '{case.label}' is reused")
+                injected_labels.add(case.label)
+
+                variant = enum_variants.get(case.variant)
+                if variant is None:
+                    continue
+                if variant.type is None:
+                    raise TypeError(f"Enum variant '{case.variant}' does not carry payload")
+
+                payload_var = case.payload_var
+                payload_var.type = variant.type
+                payload_var = add_variable(payload_var)
+                case.payload_var = payload_var
+
+                target_block = block_map.get(case.label)
+                if target_block is None:
+                    raise TypeError(f"Unknown match target block '{case.label}'")
+
+                payload_ptr = TypedVariable(name=f".{payload_var.name}_match_ptr", type=Pointer(variant.type))
+                target_block.body.insert(
+                    0,
+                    Instruction_load(var_out=payload_var, var=payload_ptr),
+                )
+                target_block.body.insert(
+                    0,
+                    Instruction_getfield(
+                        var_out=payload_ptr,
+                        src=instr.cond_var,
+                        field=TypedVariable(case.variant, Pointer(variant.type)),
+                    ),
+                )
+
         # step 0: Collect all variables
         for param in fn.params:
             if param.type is not None:
                 param.type = self._resolve_type(param.type)
             add_variable(param)
+
+        for block in fn.body:
+            for instr in block.body:
+                if isinstance(instr, Instruction_match):
+                    instr.cond_var = add_variable(instr.cond_var)
+                    assert instr.cond_var.type is not None
+                    instr.cond_var.type = self._resolve_type(instr.cond_var.type)
+                    inject_match_payload_binding(instr)
 
         for block in fn.body:
             for instr_id, instr in enumerate(block.body):
@@ -501,6 +558,34 @@ class Resolver:
                     instr.cond_var = add_variable(instr.cond_var)
                 elif isinstance(instr, Instruction_switch):
                     instr.cond_var = add_variable(instr.cond_var)
+                elif isinstance(instr, Instruction_match):
+                    instr.cond_var = add_variable(instr.cond_var)
+                    assert instr.cond_var.type is not None
+                    instr.cond_var.type = self._resolve_type(instr.cond_var.type)
+                    if instr.cond_var.type.name not in self.enums:
+                        raise TypeError(f"Match condition must be an enum, got '{instr.cond_var.type}'")
+
+                    known_variants = {
+                        variant.name
+                        for variant in self._get_enum_variants(instr.cond_var.type.name, instr.cond_var.type.generics)
+                    }
+                    seen_variants: set[str] = set()
+                    for case in instr.cases:
+                        if case.variant not in known_variants:
+                            raise TypeError(
+                                f"Unknown match variant '{case.variant}' for enum '{instr.cond_var.type.name}'"
+                            )
+                        if case.variant in seen_variants:
+                            raise TypeError(f"Duplicate match variant '{case.variant}'")
+                        seen_variants.add(case.variant)
+                        if case.payload_var is not None and case.payload_var.type != next(
+                            variant.type
+                            for variant in self._get_enum_variants(
+                                instr.cond_var.type.name, instr.cond_var.type.generics
+                            )
+                            if variant.name == case.variant
+                        ):
+                            raise TypeError(f"Type mismatch for match payload variable '{case.payload_var.name}'")
                 elif isinstance(instr, Instruction_salloc):
                     instr.type = self._resolve_type(instr.type)
                     expected_type = Pointer(instr.type)
@@ -530,12 +615,13 @@ class Resolver:
                 elif isinstance(instr, Instruction_load):
                     instr.var = add_variable(instr.var)
                     if instr.var.type is not None:
-                        if instr.var_out.type is not None and instr.var_out.type != Pointer(instr.var.type):
-                            raise TypeError(
-                                f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {Pointer(instr.var.type)}"
-                            )
                         assert isinstance(instr.var.type, Pointer)
-                        instr.var_out.type = instr.var.type.pointee
+                        expected_type = instr.var.type.pointee
+                        if instr.var_out.type is not None and instr.var_out.type != expected_type:
+                            raise TypeError(
+                                f"Type mismatch for variable '{instr.var_out.name}': {instr.var_out.type} != {expected_type}"
+                            )
+                        instr.var_out.type = expected_type
                     instr.var_out = add_variable(instr.var_out)
                 elif isinstance(instr, Instruction_store):
                     instr.var_src = add_variable(instr.var_src)

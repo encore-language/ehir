@@ -7,7 +7,14 @@ from ehir.core.derectives import Derective_cimp, Derective_fn, Derective_imp, De
 from ehir.core.derectives.base import Derective
 from ehir.core.instructions.base import Assignable, Instruction
 from ehir.core.instructions.capture import Instruction_lcpos, Instruction_lcsos, Instruction_scsoh, Instruction_scsos
-from ehir.core.instructions.control_flow import Instruction_br, Instruction_call, Instruction_cbr, Instruction_ret
+from ehir.core.instructions.control_flow import (
+    Instruction_br,
+    Instruction_call,
+    Instruction_cbr,
+    Instruction_match,
+    Instruction_ret,
+    MatchCase,
+)
 from ehir.core.instructions.control_flow.phi import Instruction_phi, PhiPair
 from ehir.core.instructions.memory import Instruction_sgetfield
 from ehir.core.instructions.operators.arithmetic import (
@@ -145,6 +152,9 @@ class EHIR_Builder:
 
     def build_cbr(self, cond_var: Variable, true_label: str, else_label: str):
         self._add(Instruction_cbr(cond_var=cond_var, true_br_label=true_label, else_br_label=else_label))
+
+    def build_match(self, cond_var: Variable, default_label: str, cases: list[MatchCase]):
+        self._add(Instruction_match(cond_var=cond_var, default_case=default_label, cases=cases))
 
     def build_ieq(self, lhs: Variable, rhs: Variable, name: Optional[str] = None) -> Instruction_ieq:
         instr = Instruction_ieq(self._reserve_variable(name, Usize_t(1)), lhs, rhs)

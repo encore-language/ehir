@@ -19,6 +19,7 @@ from ehir.core.instructions.control_flow import (
     Instruction_br,
     Instruction_call,
     Instruction_cbr,
+    Instruction_match,
     Instruction_phi,
     Instruction_ret,
     Instruction_switch,
@@ -97,6 +98,10 @@ class Deallocator:
                 children.append(block.term.default_case)
                 for case in block.term.cases:
                     children.append(case[1])
+            elif isinstance(block.term, Instruction_match):
+                children.append(block.term.default_case)
+                for case in block.term.cases:
+                    children.append(case.label)
 
             for child in children:
                 if child not in cfg[block.name]:
@@ -148,6 +153,13 @@ class Deallocator:
                             for i in range(len(block.term.cases)):
                                 if block.term.cases[i][1] == least_shared_node:
                                     block.term.cases[i] = (block.term.cases[i][0], dealloc_block.name)
+                    elif isinstance(block.term, Instruction_match):
+                        if block.term.default_case == least_shared_node:
+                            block.term.default_case = dealloc_block.name
+                        else:
+                            for i, case in enumerate(block.term.cases):
+                                if case.label == least_shared_node:
+                                    block.term.cases[i] = type(case)(variant=case.variant, label=dealloc_block.name)
 
             else:
                 dealloc_block = name2block[least_shared_node]
@@ -210,6 +222,8 @@ class Deallocator:
             elif isinstance(instr, Instruction_ret):
                 self._add_variable_usage(instr.var)
             elif isinstance(instr, Instruction_cbr):
+                self._add_variable_usage(instr.cond_var)
+            elif isinstance(instr, Instruction_match):
                 self._add_variable_usage(instr.cond_var)
             elif isinstance(instr, Instruction_getptr):
                 self._add_variable_usage(instr.var)

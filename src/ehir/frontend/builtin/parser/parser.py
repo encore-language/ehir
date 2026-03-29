@@ -31,8 +31,10 @@ from ehir.core.instructions.control_flow import (
     Instruction_br,
     Instruction_call,
     Instruction_cbr,
+    Instruction_match,
     Instruction_ret,
     Instruction_switch,
+    MatchCase,
 )
 from ehir.core.instructions.control_flow.phi import Instruction_phi, PhiPair
 from ehir.core.instructions.memory import (
@@ -273,6 +275,8 @@ class Parser:
             return self._parse_br()
         elif isinstance(curr_token, t.CBR):
             return self._parse_cbr()
+        elif isinstance(curr_token, t.MATCH):
+            return self._parse_match()
         elif isinstance(curr_token, t.SWITCH):
             return self._parse_switch()
         elif isinstance(curr_token, t.PUT):
@@ -337,6 +341,27 @@ class Parser:
             cases.append((val, label))
         self._safe_consume(t.RIGHT_BRACE)
         return Instruction_switch(cond_var=cond_var, default_case=default_label, cases=cases)
+
+    def _parse_match(self) -> Instruction_match:
+        self._safe_consume(t.MATCH)
+        cond_var = self._parse_variable()
+        self._safe_consume(t.COMMA)
+        default_label = self._parse_block_label()
+
+        cases: list[MatchCase] = []
+        self._safe_consume(t.LEFT_BRACE)
+        while not isinstance(self._lookup_curr(), t.RIGHT_BRACE):
+            variant = self._safe_consume(t.IDENTIFIER).string
+            payload_var = None
+            if isinstance(self._lookup_curr(), t.LEFT_PAREN):
+                self._safe_consume(t.LEFT_PAREN)
+                payload_var = self._parse_variable()
+                self._safe_consume(t.RIGHT_PAREN)
+            self._safe_consume(t.BOLD_ARROW)
+            label = self._parse_block_label()
+            cases.append(MatchCase(variant=variant, label=label, payload_var=payload_var))
+        self._safe_consume(t.RIGHT_BRACE)
+        return Instruction_match(cond_var=cond_var, default_case=default_label, cases=cases)
 
     def _parse_ret(self) -> Instruction_ret:
         self._safe_consume(t.RET)

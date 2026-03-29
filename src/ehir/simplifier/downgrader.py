@@ -22,6 +22,7 @@ from ehir.core.instructions.control_flow import (
     Instruction_br,
     Instruction_call,
     Instruction_cbr,
+    Instruction_match,
     Instruction_phi,
     Instruction_ret,
     Instruction_switch,
@@ -163,6 +164,8 @@ class Downgrader:
             return self._downgrade_sgetfieldptr(instr)
         elif isinstance(instr, Instruction_cbr):
             return self._downgrade_cbr(instr)
+        elif isinstance(instr, Instruction_match):
+            return self._downgrade_match(instr)
         elif isinstance(instr, Instruction_br):
             return self._downgrade_br(instr)
         elif isinstance(instr, SKIPABLE):
@@ -466,3 +469,25 @@ class Downgrader:
             cases=[],
         )
         return [*self._downgrade_cpos(cpos), load, switch]
+
+    def _downgrade_match(self, instr: Instruction_match) -> list[Instruction]:
+        assert instr.cond_var.type is not None
+        variant_names = self._enum_variants.get(instr.cond_var.type.name)
+        if variant_names is None:
+            raise TypeError(f"Match condition must be a lowered enum, got '{instr.cond_var.type}'")
+
+        tag = TypedVariable(name=f".{instr.cond_var.name}_match_tag", type=Usize_t(8))
+        get_tag = Instruction_getfield(
+            var_out=tag,
+            src=instr.cond_var,
+            field=TypedVariable("0", Usize_t(8)),
+        )
+
+        cases: list[tuple[Usize, str]] = []
+        for case in instr.cases:
+            if case.variant not in variant_names:
+                raise TypeError(f"Unknown enum variant '{case.variant}' for '{instr.cond_var.type.name}'")
+            cases.append((Usize(variant_names.index(case.variant), size=8), case.label))
+
+        switch = Instruction_switch(cond_var=tag, default_case=instr.default_case, cases=cases)
+        return [get_tag, switch]
