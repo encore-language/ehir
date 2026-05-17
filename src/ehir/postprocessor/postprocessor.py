@@ -109,6 +109,11 @@ class Postprocessor:
             "str",
             "void",
         }
+        self._fn_ret_by_emitted_name: dict[str, Type] = {}
+        for derective in raw_mod.ast:
+            if isinstance(derective, (Normalized_fn, Derective_extern_fn)):
+                emitted_name = self._emit_symbol_name(derective.name, [param.type for param in derective.params])
+                self._fn_ret_by_emitted_name[emitted_name] = derective.ret_type
         mod = ProcessedModule(id=raw_mod.id, structs=[], funcs=[])
         for derective in raw_mod.ast:
             if isinstance(derective, Normalized_fn):
@@ -169,6 +174,11 @@ class Postprocessor:
                 var=TypedVariable(instr.var.name, instr.var.type),
             )
         if isinstance(instr, Instruction_call):
+            emitted_name = self._emit_symbol_name(instr.fn_name, [arg.type for arg in instr.args])
+            if instr.var_out.type is None:
+                inferred_ret = self._fn_ret_by_emitted_name.get(emitted_name)
+                if inferred_ret is not None:
+                    instr.var_out.type = inferred_ret
             if instr.var_out.type is None:
                 raise AssertionError(f"Instruction_call has unresolved output type: {instr}")
             args = []
@@ -178,9 +188,7 @@ class Postprocessor:
                 args.append(TypedVariable(arg.name, arg.type))
             return ProcessedInstruction_call(
                 var_out=TypedVariable(instr.var_out.name, instr.var_out.type),
-                fn_name=self._emit_symbol_name(
-                    instr.fn_name, [arg.type for arg in instr.args if arg.type is not None]
-                ),
+                fn_name=emitted_name,
                 args=args,
             )
 
@@ -270,14 +278,14 @@ class Postprocessor:
 
         raise NotImplementedError(term)
 
-    def _emit_symbol_name(self, name: str, arg_types: list[Type] | None = None) -> str:
+    def _emit_symbol_name(self, name: str, arg_types: list[Type | None] | None = None) -> str:
         if "::" not in name:
             return name.split("[", 1)[0]
         owner_text, method_name = name.rsplit("::", 1)
         owner_name = owner_text.split("[", 1)[0]
         method_name = method_name.split("[", 1)[0]
         # Keep operator trait calls canonical for dedicated codegen fast-path.
-        if method_name != "op" and arg_types:
+        if method_name != "op" and arg_types and arg_types[0] is not None:
             recv = self._mangle_type(arg_types[0])
             if recv:
                 method_name = f"{method_name}__{recv}"
