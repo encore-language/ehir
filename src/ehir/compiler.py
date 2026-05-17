@@ -274,8 +274,6 @@ class EHIR_ProjectCompiler:
 
     def _is_backend_emittable(self, directive, concrete_type_names: set[str]) -> bool:
         if isinstance(directive, Derective_fn):
-            if directive.name.startswith("std::src::vec::mod::"):
-                return True
             return all(
                 self._is_concrete_type(param.type, concrete_type_names) for param in directive.params
             ) and self._is_concrete_type(directive.ret_type, concrete_type_names)
@@ -302,6 +300,10 @@ class EHIR_ProjectCompiler:
         if typ.generics and not all(self._is_concrete_type(generic, concrete_type_names) for generic in typ.generics):
             return False
         builtin_scalar_names = {"void", "str", "char"}
+        # Box[T] is a compiler-level builtin aggregate; it may be materialized by
+        # monomorphization or lowered as a stable runtime struct symbol.
+        if typ.name == "Box" or typ.name.startswith("__Box_"):
+            return True
         return (
             typ.name in concrete_type_names
             or typ.name in builtin_scalar_names

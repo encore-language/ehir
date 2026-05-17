@@ -369,6 +369,17 @@ class Resolver:
                         ],
                         ret=self._resolve_type(self._replace_generics_by_name(fn_directive.ret_type, mapping)),
                     )
+                inferred = self._infer_fn_generic_mapping(fn_directive, instr, vars_by_name)
+                if inferred is not None and len(inferred) == len(fn_generics):
+                    instr.generics = [deepcopy(inferred[g.name]) for g in fn_generics]
+                    mapping = {g.name: deepcopy(inferred[g.name]) for g in fn_generics}
+                    return _MethodSig(
+                        params=[
+                            self._resolve_type(self._replace_generics_by_name(param.type, mapping))
+                            for param in fn_directive.params
+                        ],
+                        ret=self._resolve_type(self._replace_generics_by_name(fn_directive.ret_type, mapping)),
+                    )
             return _MethodSig(
                 params=[self._resolve_type(param.type) for param in fn_directive.params],
                 ret=self._resolve_type(fn_directive.ret_type),
@@ -455,6 +466,52 @@ class Resolver:
                     generic_name,
                 )
         raise TypeError(f"Unknown function '{instr.fn_name}'")
+
+    def _infer_fn_generic_mapping(
+        self,
+        fn_directive,
+        instr: Instruction_call,
+        vars_by_name: dict[str, Type | None],
+    ) -> dict[str, Type] | None:
+        fn_generics = getattr(fn_directive, "generics", [])
+        if not fn_generics:
+            return {}
+        if len(instr.args) != len(fn_directive.params):
+            return None
+
+        mapping: dict[str, Type] = {}
+        for arg, param in zip(instr.args, fn_directive.params, strict=True):
+            arg_t = self._var_type(vars_by_name, arg)
+            if arg_t is None:
+                return None
+            if not self._bind_generic_from_types(param.type, arg_t, mapping):
+                return None
+
+        if any(g.name not in mapping for g in fn_generics):
+            return None
+        return mapping
+
+    def _bind_generic_from_types(self, template: Type, concrete: Type, mapping: dict[str, Type]) -> bool:
+        if isinstance(template, Pointer) and isinstance(concrete, Pointer):
+            return self._bind_generic_from_types(template.pointee, concrete.pointee, mapping)
+        if isinstance(template, Reference) and isinstance(concrete, Reference):
+            return self._bind_generic_from_types(template.pointee, concrete.pointee, mapping)
+
+        if not template.generics and template.name and template.name[0].isupper():
+            existed = mapping.get(template.name)
+            if existed is None:
+                mapping[template.name] = deepcopy(concrete)
+                return True
+            return self._types_compatible(existed, concrete)
+
+        if template.name != concrete.name:
+            return False
+        if len(template.generics) != len(concrete.generics):
+            return False
+        for t_g, c_g in zip(template.generics, concrete.generics, strict=True):
+            if not self._bind_generic_from_types(t_g, c_g, mapping):
+                return False
+        return True
 
     def _replace_generics_by_name(self, typ: Type, mapping: dict[str, Type]) -> Type:
         if isinstance(typ, Pointer):
