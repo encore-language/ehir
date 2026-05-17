@@ -113,7 +113,7 @@ class Postprocessor:
             if isinstance(derective, Normalized_fn):
                 mod.funcs.append(
                     ProcessedDerective_fn(
-                        name=self._emit_symbol_name(derective.name),
+                        name=self._emit_symbol_name(derective.name, [param.type for param in derective.params]),
                         params=derective.params,
                         ret_type=derective.ret_type,
                         entry_block=self._validate_block(derective.entry_block),
@@ -124,7 +124,7 @@ class Postprocessor:
             elif isinstance(derective, Derective_extern_fn):
                 mod.funcs.append(
                     ProcessedDerective_extern_fn(
-                        name=self._emit_symbol_name(derective.name),
+                        name=self._emit_symbol_name(derective.name, [param.type for param in derective.params]),
                         params=derective.params,
                         ret_type=derective.ret_type,
                     )
@@ -175,7 +175,9 @@ class Postprocessor:
                 args.append(TypedVariable(arg.name, arg.type))
             return ProcessedInstruction_call(
                 var_out=TypedVariable(instr.var_out.name, instr.var_out.type),
-                fn_name=self._emit_symbol_name(instr.fn_name),
+                fn_name=self._emit_symbol_name(
+                    instr.fn_name, [arg.type for arg in instr.args if arg.type is not None]
+                ),
                 args=args,
             )
 
@@ -265,13 +267,25 @@ class Postprocessor:
 
         raise NotImplementedError(term)
 
-    def _emit_symbol_name(self, name: str) -> str:
+    def _emit_symbol_name(self, name: str, arg_types: list[Type] | None = None) -> str:
         if "::" not in name:
             return name.split("[", 1)[0]
         owner_text, method_name = name.rsplit("::", 1)
         owner_name = owner_text.split("[", 1)[0]
         method_name = method_name.split("[", 1)[0]
+        # Keep operator trait calls canonical for dedicated codegen fast-path.
+        if method_name != "op" and arg_types:
+            recv = self._mangle_type(arg_types[0])
+            if recv:
+                method_name = f"{method_name}__{recv}"
         return f"{owner_name}::{method_name}"
+
+    def _mangle_type(self, typ: Type) -> str:
+        base = typ.name.split("[", 1)[0]
+        if typ.generics:
+            inner = "_".join(self._mangle_type(generic) for generic in typ.generics)
+            return f"{base}_{inner}"
+        return base.replace("::", "_")
 
     def _emit_method_name(self, method_name: str) -> str:
         if "__" in method_name:
