@@ -124,9 +124,9 @@ class EHIR_ProjectCompiler:
             ast=self._builtin_directives() + deepcopy(node.module.ast),
         )
 
+        module.ast = self._lift_impl_methods(module.ast)
         module.ast = Resolver().run(module.ast)
         self._emit_ehir_stage(refrain.name, "post_resolve", module.ast)
-        module.ast = self._lift_impl_methods(module.ast)
         module.ast = ReferenceLoweringPass().run(module.ast)
         module.ast = MonomorphizationPass().run(module.ast)
         self._emit_ehir_stage(refrain.name, "post_monomorphize", module.ast)
