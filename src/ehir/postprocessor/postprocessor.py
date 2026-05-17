@@ -267,12 +267,11 @@ class Postprocessor:
 
     def _emit_symbol_name(self, name: str) -> str:
         if "::" not in name:
-            return name
-
+            return name.split("[", 1)[0]
         owner_text, method_name = name.rsplit("::", 1)
         owner_name = owner_text.split("[", 1)[0]
         method_name = method_name.split("[", 1)[0]
-        return f"{owner_name}__{self._emit_method_name(method_name)}"
+        return f"{owner_name}::{method_name}"
 
     def _emit_method_name(self, method_name: str) -> str:
         if "__" in method_name:
