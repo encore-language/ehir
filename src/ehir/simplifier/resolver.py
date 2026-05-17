@@ -97,6 +97,7 @@ class Resolver:
         self.traits = {}
         self.impls = []
         self.type_aliases = {}
+        self._current_fn_name: str | None = None
 
         for d in ast:
             if isinstance(d, Derective_typealias):
@@ -175,6 +176,7 @@ class Resolver:
             self._rewrite_types(d)
 
     def _resolve_fn(self, fn: Derective_fn) -> None:
+        self._current_fn_name = fn.name
         vars_by_name: dict[str, Type | None] = {}
         for p in fn.params:
             vars_by_name[p.name] = p.type
@@ -193,6 +195,7 @@ class Resolver:
                 self._commit_instr_vars(instr, vars_by_name)
         for i, p in enumerate(fn.params):
             fn.params[i] = Parameter(p.name, self._must_get(vars_by_name, p.name, fn.name))
+        self._current_fn_name = None
 
     def _resolve_instr(self, instr, fn_ret_type: Type, vars_by_name: dict[str, Type | None]) -> bool:
         if isinstance(instr, Instruction_capprim):
@@ -660,7 +663,8 @@ class Resolver:
             if curr.generics and not t.generics:
                 return False
         if not self._types_compatible(curr, t):
-            raise TypeError(f"Type mismatch: {curr} != {t} for '{v.name}'")
+            where = f" in fn '{self._current_fn_name}'" if self._current_fn_name else ""
+            raise TypeError(f"Type mismatch: {curr} != {t} for '{v.name}'{where}")
         return False
 
     def _unify_var(self, vars_by_name: dict[str, Type | None], v: Variable, t: Type) -> bool:
