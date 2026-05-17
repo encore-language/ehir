@@ -171,6 +171,7 @@ class EHIR_ProjectCompiler:
             directive for directive in module.ast if self._is_backend_emittable(directive, concrete_type_names)
         ]
         module.ast = [directive for directive in module.ast if not isinstance(directive, Derective_typealias)]
+        self._emit_ehir_stage(refrain.name, "pre_postprocess", module.ast)
         processed_mod = Postprocessor().run(module)
 
         compiled_refrain = CompiledRefrain(
