@@ -390,16 +390,30 @@ class Resolver:
                 ret=self._resolve_type(fn_directive.ret_type),
             )
 
-        direct = self.fn.get(instr.fn_name)
-        if direct is not None:
-            return (build_sig(direct), direct.name)
+        trait_owner_call = False
+        owner_text_for_trait: str | None = None
+        if "::" in instr.fn_name:
+            owner_text_for_trait, _ = instr.fn_name.rsplit("::", 1)
+            owner_type_for_trait = self._parse_type_text(owner_text_for_trait)
+            if owner_type_for_trait is not None:
+                owner_base_name = owner_type_for_trait.name
+                owner_short_name = owner_base_name.split("::")[-1]
+                if owner_base_name in self.traits or any(
+                    trait.name.split("::")[-1] == owner_short_name for trait in self.traits.values()
+                ):
+                    trait_owner_call = True
+
+        if not trait_owner_call:
+            direct = self.fn.get(instr.fn_name)
+            if direct is not None:
+                return (build_sig(direct), direct.name)
 
         if "::" in instr.fn_name:
             parts = instr.fn_name.split("::")
             if len(parts) >= 2:
                 tail = "::".join(parts[-2:])
                 tail_direct = self.fn.get(tail)
-                if tail_direct is not None:
+                if tail_direct is not None and not trait_owner_call:
                     return (build_sig(tail_direct), tail_direct.name)
 
         if "::" not in instr.fn_name:
