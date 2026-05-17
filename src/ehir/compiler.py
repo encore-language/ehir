@@ -140,10 +140,8 @@ class EHIR_ProjectCompiler:
         self._emit_ehir_stage(refrain.name, "pre_downgrade", module.ast)
         module.ast = Downgrader().run(module.ast)
         self._emit_ehir_stage(refrain.name, "post_downgrade", module.ast)
-        module.ast = UnneededSymbolsStripper().run(
-            module.ast,
-            keep_public_api=refrain.type != Refrain.TargetType.EXECUTABLE,
-        )
+        if refrain.type == Refrain.TargetType.EXECUTABLE:
+            module.ast = UnneededSymbolsStripper().run(module.ast, keep_public_api=False)
         lifted_method_names = {
             directive.name for directive in module.ast if isinstance(directive, (Derective_fn, Derective_extern_fn))
         }
