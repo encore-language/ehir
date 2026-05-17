@@ -180,7 +180,14 @@ class Postprocessor:
                 if inferred_ret is not None:
                     instr.var_out.type = inferred_ret
             if instr.var_out.type is None:
-                raise AssertionError(f"Instruction_call has unresolved output type: {instr}")
+                hint = [
+                    key
+                    for key in self._fn_ret_by_emitted_name
+                    if key.startswith(instr.fn_name) or key.startswith(instr.fn_name + "__")
+                ][:5]
+                raise AssertionError(
+                    f"Instruction_call has unresolved output type: {instr}; emitted='{emitted_name}'; candidates={hint}"
+                )
             args = []
             for arg in instr.args:
                 if arg.type is None:
