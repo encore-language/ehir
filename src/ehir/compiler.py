@@ -126,6 +126,7 @@ class EHIR_ProjectCompiler:
 
         module.ast = Resolver().run(module.ast)
         self._emit_ehir_stage(refrain.name, "post_resolve", module.ast)
+        module.ast = self._lift_impl_methods(module.ast)
         module.ast = ReferenceLoweringPass().run(module.ast)
         module.ast = MonomorphizationPass().run(module.ast)
         self._emit_ehir_stage(refrain.name, "post_monomorphize", module.ast)
@@ -142,26 +143,6 @@ class EHIR_ProjectCompiler:
         self._emit_ehir_stage(refrain.name, "post_downgrade", module.ast)
         if refrain.type == Refrain.TargetType.EXECUTABLE:
             module.ast = UnneededSymbolsStripper().run(module.ast, keep_public_api=False)
-        lifted_method_names = {
-            directive.name for directive in module.ast if isinstance(directive, (Derective_fn, Derective_extern_fn))
-        }
-        lifted_methods: list[Derective_fn] = []
-        for directive in module.ast:
-            if isinstance(directive, Derective_impl):
-                for method in directive.methods:
-                    if not isinstance(method, Derective_fn):
-                        continue
-                    lifted = deepcopy(method)
-                    if "::" not in lifted.name:
-                        owner = directive.trait_name if directive.trait_name else directive.for_type.name
-                        if owner:
-                            lifted.name = f"{owner}::{lifted.name}"
-                    if lifted.name in lifted_method_names:
-                        continue
-                    lifted_method_names.add(lifted.name)
-                    lifted_methods.append(lifted)
-        if lifted_methods:
-            module.ast.extend(lifted_methods)
         module.ast = [
             directive
             for directive in module.ast
@@ -190,6 +171,30 @@ class EHIR_ProjectCompiler:
         self._cache.store(compiled_refrain)
         self.compiled_refrains[refrain.name] = compiled_refrain
         return compiled_refrain
+
+    def _lift_impl_methods(self, ast: list[Derective]) -> list[Derective]:
+        lifted_method_names = {
+            directive.name for directive in ast if isinstance(directive, (Derective_fn, Derective_extern_fn))
+        }
+        lifted_methods: list[Derective_fn] = []
+        for directive in ast:
+            if not isinstance(directive, Derective_impl):
+                continue
+            for method in directive.methods:
+                if not isinstance(method, Derective_fn):
+                    continue
+                lifted = deepcopy(method)
+                if "::" not in lifted.name:
+                    owner = directive.trait_name if directive.trait_name else directive.for_type.name
+                    if owner:
+                        lifted.name = f"{owner}::{lifted.name}"
+                if lifted.name in lifted_method_names:
+                    continue
+                lifted_method_names.add(lifted.name)
+                lifted_methods.append(lifted)
+        if lifted_methods:
+            return [*ast, *lifted_methods]
+        return ast
 
     def _emit_ehir_stage(self, refrain_name: str, stage: str, ast: list[Derective]) -> None:
         ehir_dir = self.backend.profile_path / "ehir"
