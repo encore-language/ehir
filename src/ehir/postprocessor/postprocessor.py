@@ -169,10 +169,12 @@ class Postprocessor:
                 var=TypedVariable(instr.var.name, instr.var.type),
             )
         if isinstance(instr, Instruction_call):
-            assert instr.var_out.type
+            if instr.var_out.type is None:
+                raise AssertionError(f"Instruction_call has unresolved output type: {instr}")
             args = []
             for arg in instr.args:
-                assert arg.type
+                if arg.type is None:
+                    raise AssertionError(f"Instruction_call has unresolved argument type: {instr}")
                 args.append(TypedVariable(arg.name, arg.type))
             return ProcessedInstruction_call(
                 var_out=TypedVariable(instr.var_out.name, instr.var_out.type),
