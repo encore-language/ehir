@@ -440,6 +440,38 @@ class Resolver:
                     resolved_name = f"{trait_name}::{resolved_method}"
                     return _MethodSig(params=params, ret=ret_t), resolved_name
 
+        # Fallback: resolve through trait declaration signature even if concrete impl
+        # is not selected at this point. This preserves result typing for downstream passes.
+        trait_decl = self.traits.get(owner_base.name)
+        if trait_decl is None:
+            owner_short = owner_base.name.split("::")[-1]
+            for trait in self.traits.values():
+                if trait.name.split("::")[-1] == owner_short:
+                    trait_decl = trait
+                    break
+        if trait_decl is not None:
+            trait_method = next((m for m in trait_decl.methods if m.name == method_name), None)
+            if trait_method is not None:
+                recv_t = self._var_type(vars_by_name, instr.args[0]) if instr.args else None
+                recv_base = recv_t.pointee if isinstance(recv_t, Reference) else recv_t
+                params = []
+                for param in trait_method.params:
+                    param_t = self._resolve_type(param.type)
+                    if recv_base is not None and param_t.name == "Self":
+                        params.append(recv_base)
+                    else:
+                        params.append(param_t)
+                ret_t = self._resolve_type(trait_method.ret_type)
+                if recv_base is not None and ret_t.name == "Self":
+                    ret_t = recv_base
+                resolved_method = trait_method.name
+                if resolved_method != "op" and recv_base is not None:
+                    suffix = self._mangle_type_name(recv_base)
+                    if suffix:
+                        resolved_method = f"{resolved_method}__{suffix}"
+                resolved_name = f"{trait_decl.name}::{resolved_method}"
+                return _MethodSig(params=params, ret=ret_t), resolved_name
+
         for impl in self.impls:
             if impl.trait_name is not None:
                 continue
