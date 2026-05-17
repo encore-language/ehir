@@ -434,7 +434,9 @@ class Resolver:
                     ret_t = self._resolve_type(self._replace_type(method.ret_type, mapping, recv_base))
                     resolved_method = method.name
                     if resolved_method != "op":
-                        resolved_method = f"{resolved_method}__{self._mangle_type_name(recv_base)}"
+                        suffix = self._mangle_type_name(recv_base)
+                        if suffix:
+                            resolved_method = f"{resolved_method}__{suffix}"
                     resolved_name = f"{trait_name}::{resolved_method}"
                     return _MethodSig(params=params, ret=ret_t), resolved_name
 
@@ -451,7 +453,9 @@ class Resolver:
             ret_t = self._resolve_type(self._replace_type(method.ret_type, mapping, owner_base))
             resolved_method = method.name
             if resolved_method != "op":
-                resolved_method = f"{resolved_method}__{self._mangle_type_name(owner_base)}"
+                suffix = self._mangle_type_name(owner_base)
+                if suffix:
+                    resolved_method = f"{resolved_method}__{suffix}"
             resolved_name = f"{impl.for_type}::{resolved_method}"
             return _MethodSig(params=params, ret=ret_t), resolved_name
 
@@ -474,10 +478,20 @@ class Resolver:
         raise TypeError(f"Unknown function '{instr.fn_name}'")
 
     def _mangle_type_name(self, typ: Type) -> str:
+        if self._is_placeholder_type_name(typ.name):
+            return ""
         if typ.generics:
-            inner = "_".join(self._mangle_type_name(generic) for generic in typ.generics)
+            mangled_generics = [self._mangle_type_name(generic) for generic in typ.generics]
+            if any(not part for part in mangled_generics):
+                return ""
+            inner = "_".join(mangled_generics)
             return f"{typ.name}_{inner}"
         return typ.name.replace("::", "_")
+
+    def _is_placeholder_type_name(self, name: str) -> bool:
+        if name == "T":
+            return True
+        return len(name) > 1 and name.startswith("T") and name[1:].isdigit()
 
     def _infer_fn_generic_mapping(
         self,

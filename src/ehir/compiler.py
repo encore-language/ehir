@@ -189,7 +189,9 @@ class EHIR_ProjectCompiler:
                     if owner:
                         method_name = lifted.name
                         if method_name != "op":
-                            method_name = f"{method_name}__{self._mangle_type_name(directive.for_type)}"
+                            suffix = self._mangle_type_name(directive.for_type)
+                            if suffix:
+                                method_name = f"{method_name}__{suffix}"
                         lifted.name = f"{owner}::{method_name}"
                 if lifted.name in lifted_method_names:
                     continue
@@ -200,10 +202,20 @@ class EHIR_ProjectCompiler:
         return ast
 
     def _mangle_type_name(self, typ: Type) -> str:
+        if self._is_placeholder_type_name(typ.name):
+            return ""
         if typ.generics:
-            inner = "_".join(self._mangle_type_name(generic) for generic in typ.generics)
+            mangled_generics = [self._mangle_type_name(generic) for generic in typ.generics]
+            if any(not part for part in mangled_generics):
+                return ""
+            inner = "_".join(mangled_generics)
             return f"{typ.name}_{inner}"
         return typ.name.replace("::", "_")
+
+    def _is_placeholder_type_name(self, name: str) -> bool:
+        if name == "T":
+            return True
+        return len(name) > 1 and name.startswith("T") and name[1:].isdigit()
 
     def _emit_ehir_stage(self, refrain_name: str, stage: str, ast: list[Derective]) -> None:
         ehir_dir = self.backend.profile_path / "ehir"
