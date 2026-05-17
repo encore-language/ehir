@@ -40,6 +40,7 @@ from ehir.core.instructions import (
 )
 from ehir.core.instructions.base import Instruction
 from ehir.core.primitives import Usize_t
+from ehir.core.type import Type
 from ehir.core.variable import TypedVariable
 from ehir.postprocessor.instructions import (
     ProcessedControlFlow,
