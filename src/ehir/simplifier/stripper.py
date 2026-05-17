@@ -9,6 +9,14 @@ from ehir.core.type import Pointer, Reference, Type
 
 class UnneededSymbolsStripper:
     def run(self, ast: list[Derective], *, keep_public_api: bool = True) -> list[Derective]:
+        public_type_names: set[str] = set()
+        if keep_public_api:
+            for directive in ast:
+                if isinstance(directive, (Derective_struct, Derective_enum, Derective_trait)) and getattr(
+                    directive, "is_public", False
+                ):
+                    public_type_names.add(directive.name)
+
         fns = {directive.name: directive for directive in ast if isinstance(directive, Derective_fn)}
         for directive in ast:
             if isinstance(directive, Derective_impl):
@@ -27,6 +35,19 @@ class UnneededSymbolsStripper:
                 or (keep_public_api and getattr(directive, "is_public", False))
             )
         }
+        if keep_public_api:
+            for directive in ast:
+                if not isinstance(directive, Derective_impl):
+                    continue
+                keep_impl_methods = False
+                if directive.trait_name and directive.trait_name in public_type_names:
+                    keep_impl_methods = True
+                if directive.for_type.name in public_type_names:
+                    keep_impl_methods = True
+                for method in directive.methods:
+                    if getattr(method, "is_public", False) or keep_impl_methods:
+                        reachable_fns.add(method.name)
+
         extern_fns = {directive.name for directive in ast if isinstance(directive, Derective_extern_fn)}
 
         pending = list(reachable_fns)
@@ -49,13 +70,7 @@ class UnneededSymbolsStripper:
 
         reachable_types = set()
         if keep_public_api:
-            for directive in ast:
-                if isinstance(directive, Derective_struct) and getattr(directive, "is_public", False):
-                    reachable_types.add(directive.name)
-                elif isinstance(directive, Derective_enum) and getattr(directive, "is_public", False):
-                    reachable_types.add(directive.name)
-                elif isinstance(directive, Derective_trait) and getattr(directive, "is_public", False):
-                    reachable_types.add(directive.name)
+            reachable_types.update(public_type_names)
 
         for directive in ast:
             if isinstance(directive, (Derective_extern_fn, Derective_fn)) and directive.name in reachable_fns:
