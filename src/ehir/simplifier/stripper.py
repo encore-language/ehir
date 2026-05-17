@@ -39,14 +39,8 @@ class UnneededSymbolsStripper:
             for directive in ast:
                 if not isinstance(directive, Derective_impl):
                     continue
-                keep_impl_methods = False
-                if directive.trait_name and directive.trait_name in public_type_names:
-                    keep_impl_methods = True
-                if directive.for_type.name in public_type_names:
-                    keep_impl_methods = True
                 for method in directive.methods:
-                    if getattr(method, "is_public", False) or keep_impl_methods:
-                        reachable_fns.add(method.name)
+                    reachable_fns.add(method.name)
 
         extern_fns = {directive.name for directive in ast if isinstance(directive, Derective_extern_fn)}
 
