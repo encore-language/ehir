@@ -432,7 +432,10 @@ class Resolver:
                     mapping = self._impl_generic_mapping(impl.for_type, recv_base)
                     params = [self._resolve_type(self._replace_type(p.type, mapping, recv_base)) for p in method.params]
                     ret_t = self._resolve_type(self._replace_type(method.ret_type, mapping, recv_base))
-                    resolved_name = f"{trait_name}::{method.name}"
+                    resolved_method = method.name
+                    if resolved_method != "op":
+                        resolved_method = f"{resolved_method}__{self._mangle_type_name(recv_base)}"
+                    resolved_name = f"{trait_name}::{resolved_method}"
                     return _MethodSig(params=params, ret=ret_t), resolved_name
 
         for impl in self.impls:
@@ -446,7 +449,10 @@ class Resolver:
             mapping = self._impl_generic_mapping(impl.for_type, owner_base)
             params = [self._resolve_type(self._replace_type(p.type, mapping, owner_base)) for p in method.params]
             ret_t = self._resolve_type(self._replace_type(method.ret_type, mapping, owner_base))
-            resolved_name = f"{impl.for_type}::{method.name}"
+            resolved_method = method.name
+            if resolved_method != "op":
+                resolved_method = f"{resolved_method}__{self._mangle_type_name(owner_base)}"
+            resolved_name = f"{impl.for_type}::{resolved_method}"
             return _MethodSig(params=params, ret=ret_t), resolved_name
 
         if owner_type.generics:
@@ -466,6 +472,12 @@ class Resolver:
                     generic_name,
                 )
         raise TypeError(f"Unknown function '{instr.fn_name}'")
+
+    def _mangle_type_name(self, typ: Type) -> str:
+        if typ.generics:
+            inner = "_".join(self._mangle_type_name(generic) for generic in typ.generics)
+            return f"{typ.name}_{inner}"
+        return typ.name.replace("::", "_")
 
     def _infer_fn_generic_mapping(
         self,

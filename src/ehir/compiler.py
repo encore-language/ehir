@@ -187,7 +187,10 @@ class EHIR_ProjectCompiler:
                 if "::" not in lifted.name:
                     owner = directive.trait_name if directive.trait_name else directive.for_type.name
                     if owner:
-                        lifted.name = f"{owner}::{lifted.name}"
+                        method_name = lifted.name
+                        if method_name != "op":
+                            method_name = f"{method_name}__{self._mangle_type_name(directive.for_type)}"
+                        lifted.name = f"{owner}::{method_name}"
                 if lifted.name in lifted_method_names:
                     continue
                 lifted_method_names.add(lifted.name)
@@ -195,6 +198,12 @@ class EHIR_ProjectCompiler:
         if lifted_methods:
             return [*ast, *lifted_methods]
         return ast
+
+    def _mangle_type_name(self, typ: Type) -> str:
+        if typ.generics:
+            inner = "_".join(self._mangle_type_name(generic) for generic in typ.generics)
+            return f"{typ.name}_{inner}"
+        return typ.name.replace("::", "_")
 
     def _emit_ehir_stage(self, refrain_name: str, stage: str, ast: list[Derective]) -> None:
         ehir_dir = self.backend.profile_path / "ehir"
