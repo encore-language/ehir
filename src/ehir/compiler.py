@@ -150,8 +150,6 @@ class EHIR_ProjectCompiler:
         lifted_methods: list[Derective_fn] = []
         for directive in module.ast:
             if isinstance(directive, Derective_impl):
-                if directive.trait_name is not None and directive.trait_name != "":
-                    continue
                 for method in directive.methods:
                     if not isinstance(method, Derective_fn):
                         continue
