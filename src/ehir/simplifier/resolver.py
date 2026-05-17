@@ -393,9 +393,10 @@ class Resolver:
         trait_owner_call = False
         owner_text_for_trait: str | None = None
         if "::" in instr.fn_name:
-            owner_text_for_trait, _ = instr.fn_name.rsplit("::", 1)
+            owner_text_for_trait, trait_method_for_trait = instr.fn_name.rsplit("::", 1)
+            is_specialized_method_name = "__" in trait_method_for_trait and trait_method_for_trait != "op"
             owner_type_for_trait = self._parse_type_text(owner_text_for_trait)
-            if owner_type_for_trait is not None:
+            if owner_type_for_trait is not None and not is_specialized_method_name:
                 owner_base_name = owner_type_for_trait.name
                 owner_short_name = owner_base_name.split("::")[-1]
                 if owner_base_name in self.traits or any(
