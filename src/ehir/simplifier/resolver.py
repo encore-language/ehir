@@ -353,6 +353,8 @@ class Resolver:
     def _resolve_callable_signature(
         self, instr: Instruction_call, vars_by_name: dict[str, Type | None]
     ) -> tuple[_MethodSig, str] | None:
+        instr.fn_name = self._normalize_call_name(instr.fn_name)
+
         def build_sig(fn_directive) -> _MethodSig:
             fn_generics = getattr(fn_directive, "generics", [])
             if fn_generics:
@@ -508,6 +510,18 @@ class Resolver:
                     generic_name,
                 )
         raise TypeError(f"Unknown function '{instr.fn_name}'")
+
+    def _normalize_call_name(self, fn_name: str) -> str:
+        # Canonicalize legacy trait-op aliases from `<module>::Trait__op`
+        # into `<module>::Trait::op` so resolver/codegen operate on one naming scheme.
+        if "::" not in fn_name:
+            return fn_name
+        owner_text, method_name = fn_name.rsplit("::", 1)
+        if method_name.endswith("__op"):
+            trait_name = method_name[: -len("__op")]
+            if trait_name:
+                return f"{owner_text}::{trait_name}::op"
+        return fn_name
 
     def _mangle_type_name(self, typ: Type) -> str:
         if self._is_placeholder_type_name(typ.name):
