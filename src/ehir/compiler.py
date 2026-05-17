@@ -151,10 +151,15 @@ class EHIR_ProjectCompiler:
                 for method in directive.methods:
                     if not isinstance(method, Derective_fn):
                         continue
-                    if method.name in lifted_method_names:
+                    lifted = deepcopy(method)
+                    if "::" not in lifted.name:
+                        owner = directive.trait_name if directive.trait_name else directive.for_type.name
+                        if owner:
+                            lifted.name = f"{owner}::{lifted.name}"
+                    if lifted.name in lifted_method_names:
                         continue
-                    lifted_method_names.add(method.name)
-                    lifted_methods.append(method)
+                    lifted_method_names.add(lifted.name)
+                    lifted_methods.append(lifted)
         if lifted_methods:
             module.ast.extend(lifted_methods)
         module.ast = [
