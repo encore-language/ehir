@@ -21,7 +21,7 @@ from ehir.core.derectives import (
 from ehir.core.derectives.base import Derective
 from ehir.core.primitives import Str_t
 from ehir.core.primitives.base import PrimitiveType
-from ehir.core.type import Pointer, Reference, Type
+from ehir.core.type import Pointer, Reference, Type, is_box_type
 from ehir.core.variable import Parameter
 from ehir.format import ThemePalette, printfmt
 from ehir.frontend import EHIR_Frontend
@@ -333,6 +333,8 @@ class EHIR_ProjectCompiler:
             return False
         builtin_scalar_names = {"void", "str", "char"}
         return (
+            is_box_type(typ)
+            or
             typ.name in known_type_names
             or typ.name in builtin_scalar_names
             or not typ.name.isidentifier()
