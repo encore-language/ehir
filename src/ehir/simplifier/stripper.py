@@ -52,9 +52,14 @@ class UnneededSymbolsStripper:
                 continue
             for call_name in self._collect_called_function_names(fn):
                 canonical_call_name = emitted_to_fn.get(call_name, call_name)
-                canonical_call_name = normalized_to_fn.get(
-                    self._normalize_fn_lookup_name(canonical_call_name), canonical_call_name
-                )
+                normalized_call_name = self._normalize_fn_lookup_name(canonical_call_name)
+                canonical_call_name = normalized_to_fn.get(normalized_call_name, canonical_call_name)
+                if canonical_call_name not in fns and canonical_call_name not in extern_fns:
+                    unsuffixed_name = self._strip_method_receiver_suffix(canonical_call_name)
+                    canonical_call_name = normalized_to_fn.get(
+                        self._normalize_fn_lookup_name(unsuffixed_name),
+                        canonical_call_name,
+                    )
                 if canonical_call_name in extern_fns and canonical_call_name not in reachable_fns:
                     reachable_fns.add(canonical_call_name)
                     continue
@@ -154,3 +159,15 @@ class UnneededSymbolsStripper:
         owner_name = owner_text.split("[", 1)[0]
         method = method_name.split("[", 1)[0]
         return f"{owner_name}::{method}"
+
+    def _strip_method_receiver_suffix(self, name: str) -> str:
+        text = name
+        if text.startswith("[") and "]" in text:
+            text = text.split("]", 1)[1]
+        if "::" not in text:
+            return text
+        owner_text, method_name = text.rsplit("::", 1)
+        method = method_name.split("[", 1)[0]
+        if "__" not in method:
+            return f"{owner_text}::{method}"
+        return f"{owner_text}::{method.split('__', 1)[0]}"
