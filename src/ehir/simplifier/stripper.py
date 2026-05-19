@@ -76,18 +76,11 @@ class UnneededSymbolsStripper:
                 continue
             if isinstance(directive, Derective_fn) and directive.name not in reachable_fns:
                 continue
-            if isinstance(directive, Derective_struct):
-                is_public = getattr(directive, "is_public", False)
-                if directive.name not in reachable_types and not (keep_public_api and is_public):
-                    continue
-            if isinstance(directive, Derective_enum):
-                is_public = getattr(directive, "is_public", False)
-                if directive.name not in reachable_types and not (keep_public_api and is_public):
-                    continue
-            if isinstance(directive, Derective_trait):
-                is_public = getattr(directive, "is_public", False)
-                if directive.name not in reachable_types and not (keep_public_api and is_public):
-                    continue
+            # Keep all type declarations. Aggressive type stripping can break lowered
+            # layout contracts when instructions still reference a type by name.
+            if isinstance(directive, (Derective_struct, Derective_enum, Derective_trait)):
+                result.append(directive)
+                continue
             if isinstance(directive, Derective_impl):
                 if not self._impl_is_reachable(directive, reachable_fns, reachable_types):
                     continue
