@@ -510,6 +510,9 @@ class EHIR_ProjectCompiler:
         return node
 
     def _core_dir(self) -> Path:
+        package_core = Path(__file__).resolve().parent / "core"
+        if package_core.exists():
+            return package_core
         return Path(__file__).resolve().parents[2] / "core"
 
     def _core_module_ids(self) -> list[Path]:
