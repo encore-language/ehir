@@ -308,16 +308,13 @@ class EHIR_ProjectCompiler:
                 self._is_concrete_type(param.type, concrete_type_names) for param in directive.params
             ) and self._is_concrete_type(directive.ret_type, concrete_type_names)
         if getattr(directive, "generics", []):
-            if isinstance(directive, Derective_struct):
+            if isinstance(directive, (Derective_struct, Derective_enum)):
                 return True
             return False
         if isinstance(directive, Derective_struct):
-            return all(self._is_concrete_type(param.type, concrete_type_names) for param in directive.params)
+            return True
         if isinstance(directive, Derective_enum):
-            return all(
-                variant.type is None or self._is_concrete_type(variant.type, concrete_type_names)
-                for variant in directive.variants
-            )
+            return True
         if isinstance(directive, Derective_typealias):
             return False
         return True
