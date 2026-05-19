@@ -48,20 +48,4 @@ impl[T] Box[T] {
   ;    owner_ptr: OwnerHeader* = getfield self: Box[T] > owner
   ;    ret owner_ptr: OwnerHeader*
   ;}
-
-  #attr(safe)
-  pub fn load(self: Box[T]) -> T {
-    $entry:
-      ptr: T* = getfield self > ptr
-      value: T = load ptr: T*
-      ret value: T
-  }
-
-  #attr(safe)
-  pub fn store(self: Box[T], value: T) -> () {
-    $entry:
-      ptr: T* = getfield self > ptr
-      store value: T, ptr: T*
-      ret done: ()
-  }
 }
