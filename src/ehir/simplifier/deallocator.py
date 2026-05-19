@@ -65,6 +65,7 @@ class Deallocator:
     _variables: dict[str, Variable]
     _arg_names: set[str]
     _aggregate_names: set[str]
+    _dealloc_name_seq: int
 
     def run(self, ast: list[Derective]) -> list[Derective]:
         structs = {
@@ -97,6 +98,7 @@ class Deallocator:
         self._returned_aliases = set()
         self._variables = {}
         self._arg_names = {param.name for param in fn.params}
+        self._dealloc_name_seq = 0
         cfg: dict[str, list[str]] = {}
         observed: set[str] = set()
 
@@ -161,39 +163,37 @@ class Deallocator:
                 least_shared_node = fn.exit_block.name
 
             if any(least_shared_node in pth for pth in outer_paths):
-                dealloc_block = TerminatedBlock(
-                    name=f".dealloc_{var}",
-                    body=[],
-                    term=Instruction_br(label=least_shared_node),
-                )
-                fn.body.append(dealloc_block)
-
+                redirected_preds: set[str] = set()
                 for path in inner_paths:
                     index = path.index(least_shared_node)
-                    prev_block = path[index - 1]
-                    block = name2block[prev_block]
+                    if index == 0:
+                        continue
+                    redirected_preds.add(path[index - 1])
 
-                    if isinstance(block.term, Instruction_br):
-                        block.term.label = dealloc_block.name
-                    elif isinstance(block.term, Instruction_cbr):
-                        if block.term.true_br_label == least_shared_node:
-                            block.term.true_br_label = dealloc_block.name
-                        elif block.term.else_br_label == least_shared_node:
-                            block.term.else_br_label = dealloc_block.name
-                    elif isinstance(block.term, Instruction_switch):
-                        if block.term.default_case == least_shared_node:
-                            block.term.default_case = dealloc_block.name
-                        else:
-                            for i in range(len(block.term.cases)):
-                                if block.term.cases[i][1] == least_shared_node:
-                                    block.term.cases[i] = (block.term.cases[i][0], dealloc_block.name)
-                    elif isinstance(block.term, Instruction_match):
-                        if block.term.default_case == least_shared_node:
-                            block.term.default_case = dealloc_block.name
-                        else:
-                            for i, case in enumerate(block.term.cases):
-                                if case.label == least_shared_node:
-                                    block.term.cases[i] = type(case)(variant=case.variant, label=dealloc_block.name)
+                var_def = self._variables[var]
+                if var_def.type is None:
+                    continue
+
+                for prev_block in sorted(redirected_preds):
+                    dealloc_block_name = self._next_dealloc_block_name(var)
+                    dealloc_block = TerminatedBlock(
+                        name=dealloc_block_name,
+                        body=[
+                            Instruction_call(
+                                var_out=TypedVariable(name=f".drop_{var}", type=Type("void")),
+                                fn_name="Drop::drop",
+                                generics=[deepcopy(generic) for generic in var_def.type.generics],
+                                args=[TypedVariable(var_def.name, var_def.type)],
+                            )
+                        ],
+                        term=Instruction_br(label=least_shared_node),
+                    )
+                    fn.body.append(dealloc_block)
+                    name2block[dealloc_block.name] = dealloc_block
+
+                    block = name2block[prev_block]
+                    self._redirect_block_edge(block, least_shared_node, dealloc_block_name)
+                continue
 
             else:
                 dealloc_block = name2block[least_shared_node]
@@ -209,6 +209,38 @@ class Deallocator:
                     args=[TypedVariable(var_def.name, var_def.type)],
                 )
             )
+
+    def _next_dealloc_block_name(self, var_name: str) -> str:
+        self._dealloc_name_seq += 1
+        return f".dealloc_{var_name}_{self._dealloc_name_seq}"
+
+    def _redirect_block_edge(self, block: TerminatedBlock, src_label: str, dst_label: str) -> None:
+        if isinstance(block.term, Instruction_br):
+            if block.term.label == src_label:
+                block.term.label = dst_label
+            return
+
+        if isinstance(block.term, Instruction_cbr):
+            if block.term.true_br_label == src_label:
+                block.term.true_br_label = dst_label
+            elif block.term.else_br_label == src_label:
+                block.term.else_br_label = dst_label
+            return
+
+        if isinstance(block.term, Instruction_switch):
+            if block.term.default_case == src_label:
+                block.term.default_case = dst_label
+            for i in range(len(block.term.cases)):
+                if block.term.cases[i][1] == src_label:
+                    block.term.cases[i] = (block.term.cases[i][0], dst_label)
+            return
+
+        if isinstance(block.term, Instruction_match):
+            if block.term.default_case == src_label:
+                block.term.default_case = dst_label
+            for i, case in enumerate(block.term.cases):
+                if case.label == src_label:
+                    block.term.cases[i] = type(case)(variant=case.variant, label=dst_label)
 
     @staticmethod
     def _find_shared_path(paths: list[list[str]]) -> list[str]:
