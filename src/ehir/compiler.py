@@ -153,6 +153,9 @@ class EHIR_ProjectCompiler:
         }
         known_type_names = set(concrete_type_names)
         known_type_names |= {
+            directive.name for directive in module.ast if isinstance(directive, Derective_typealias)
+        }
+        known_type_names |= {
             type_name.rsplit("::", 1)[-1] for type_name in concrete_type_names if "::" in type_name
         }
         module.ast = [
