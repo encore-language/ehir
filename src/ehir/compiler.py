@@ -151,8 +151,12 @@ class EHIR_ProjectCompiler:
         concrete_type_names = {
             directive.name for directive in module.ast if isinstance(directive, (Derective_struct, Derective_enum))
         }
+        known_type_names = set(concrete_type_names)
+        known_type_names |= {
+            type_name.rsplit("::", 1)[-1] for type_name in concrete_type_names if "::" in type_name
+        }
         module.ast = [
-            directive for directive in module.ast if self._is_backend_emittable(directive, concrete_type_names)
+            directive for directive in module.ast if self._is_backend_emittable(directive, known_type_names)
         ]
         module.ast = [directive for directive in module.ast if not isinstance(directive, Derective_typealias)]
         self._emit_ehir_stage(refrain.name, "pre_postprocess", module.ast)
@@ -300,13 +304,11 @@ class EHIR_ProjectCompiler:
                     impl_keys.add(key)
                 target_node.module.ast.append(directive)
 
-    def _is_backend_emittable(self, directive, concrete_type_names: set[str]) -> bool:
+    def _is_backend_emittable(self, directive, known_type_names: set[str]) -> bool:
         if isinstance(directive, Derective_fn):
-            if directive.name.startswith("std::src::vec::mod::"):
-                return True
             return all(
-                self._is_concrete_type(param.type, concrete_type_names) for param in directive.params
-            ) and self._is_concrete_type(directive.ret_type, concrete_type_names)
+                self._is_concrete_type(param.type, known_type_names) for param in directive.params
+            ) and self._is_concrete_type(directive.ret_type, known_type_names)
         if getattr(directive, "generics", []):
             if isinstance(directive, (Derective_struct, Derective_enum)):
                 return True
@@ -319,16 +321,16 @@ class EHIR_ProjectCompiler:
             return False
         return True
 
-    def _is_concrete_type(self, typ: Type, concrete_type_names: set[str]) -> bool:
+    def _is_concrete_type(self, typ: Type, known_type_names: set[str]) -> bool:
         if isinstance(typ, (Pointer, Reference)):
-            return self._is_concrete_type(typ.pointee, concrete_type_names)
+            return self._is_concrete_type(typ.pointee, known_type_names)
         if isinstance(typ, PrimitiveType):
             return True
-        if typ.generics and not all(self._is_concrete_type(generic, concrete_type_names) for generic in typ.generics):
+        if typ.generics and not all(self._is_concrete_type(generic, known_type_names) for generic in typ.generics):
             return False
         builtin_scalar_names = {"void", "str", "char"}
         return (
-            typ.name in concrete_type_names
+            typ.name in known_type_names
             or typ.name in builtin_scalar_names
             or not typ.name.isidentifier()
             or typ.name.startswith(("u", "i", "f"))
